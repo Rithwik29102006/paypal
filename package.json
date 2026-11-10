@@ -9,12 +9,14 @@
     "node": ">=20"
   },
   "scripts": {
+    "api": "pnpm --filter @mandate/api dev",
     "agent": "pnpm --filter @mandate/agent dev",
     "agent:server": "pnpm --filter @mandate/agent server",
     "mcp": "pnpm --filter @mandate/agent mcp",
     "redteam": "pnpm --filter @mandate/agent redteam",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "demo": "pnpm --filter @mandate/agent demo"
+    "demo": "pnpm --filter @mandate/agent demo",
+    "db:migrate": "pnpm --filter @mandate/api db:migrate"
   }
 }

@@ -5,3 +5,15 @@ dist/
 *.log
 .DS_Store
 coverage/
+
+# Mandate additions
+.env.*
+!.env.example
+*.db
+*.db-journal
+dev.db
+*.pem
+*.key
+apps/api/.keys/
+node_modules
+dist
