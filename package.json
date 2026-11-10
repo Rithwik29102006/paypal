@@ -11,7 +11,7 @@
   "scripts": {
     "api": "pnpm --filter @mandate/api dev",
     "agent": "pnpm --filter @mandate/agent dev",
-    "agent:server": "pnpm --filter @mandate/agent server",
+    "agent:server": "pnpm --filter @mandate/agent run server",
     "mcp": "pnpm --filter @mandate/agent mcp",
     "redteam": "pnpm --filter @mandate/agent redteam",
     "test": "pnpm -r test",

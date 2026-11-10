@@ -3,8 +3,18 @@ import cors from "@fastify/cors";
 import { config } from "./config.js";
 import { mandateRoutes } from "./routes/mandates.js";
 import { receiptRoutes } from "./routes/receipts.js";
+import { checkRoutes } from "./routes/check.js";
+import { approvalRoutes } from "./routes/approvals.js";
+import { eventRoutes } from "./routes/events.js";
+import { callDetector, type DetectorClient } from "./detector.js";
 
-export async function buildServer(): Promise<FastifyInstance> {
+export interface ServerOptions {
+  detector?: DetectorClient;
+}
+
+export async function buildServer(
+  options: ServerOptions = {}
+): Promise<FastifyInstance> {
   const server = fastify({
     logger: process.env.NODE_ENV === "test" ? false : true,
   });
@@ -37,6 +47,9 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Domain routes
   await server.register(mandateRoutes);
   await server.register(receiptRoutes);
+  await server.register(eventRoutes);
+  await server.register(approvalRoutes);
+  await checkRoutes(server, options.detector ?? callDetector);
 
   return server;
 }

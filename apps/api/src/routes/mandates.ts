@@ -5,6 +5,7 @@ import { prisma } from "../db.js";
 import { signMandate, getPublicKeyPem } from "../crypto/signing.js";
 import { canonicalJson } from "../crypto/canonical.js";
 import { appendReceipt } from "../receipts.js";
+import { getSpentThisMonthCents } from "../spend.js";
 
 export async function mandateRoutes(server: FastifyInstance) {
   // POST /mandates
@@ -83,22 +84,7 @@ export async function mandateRoutes(server: FastifyInstance) {
     }
 
     // Calculate spentThisMonth: sum of captured payments in current calendar month in dollars
-    const now = new Date();
-    const startOfMonth = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
-    );
-    const capturedPayments = await prisma.payment.findMany({
-      where: {
-        mandateId: id,
-        status: "captured",
-        createdAt: { gte: startOfMonth },
-      },
-    });
-
-    const sumCents = capturedPayments.reduce(
-      (acc, p) => acc + p.amountCents,
-      0
-    );
+    const sumCents = await getSpentThisMonthCents(id);
     const spentThisMonth = Number((sumCents / 100).toFixed(2));
 
     return reply.send({

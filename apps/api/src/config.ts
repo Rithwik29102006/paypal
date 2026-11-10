@@ -21,6 +21,22 @@ const baseSchema = z.object({
   PAYPAL_WEBHOOK_ID: z.string().optional(),
   PAYPAL_RETURN_URL: z.string().optional(),
   PAYPAL_CANCEL_URL: z.string().optional(),
+  RISK_BLOCK_AT: z
+    .string()
+    .default("0.7")
+    .transform((val) => {
+      const n = Number(val);
+      if (isNaN(n)) throw new Error("RISK_BLOCK_AT must be a valid number");
+      return n;
+    }),
+  RISK_REVIEW_AT: z
+    .string()
+    .default("0.4")
+    .transform((val) => {
+      const n = Number(val);
+      if (isNaN(n)) throw new Error("RISK_REVIEW_AT must be a valid number");
+      return n;
+    }),
 });
 
 const envSchema = baseSchema

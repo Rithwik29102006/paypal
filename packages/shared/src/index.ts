@@ -33,6 +33,7 @@ export const Rules = z.object({
 export type Rules = z.infer<typeof Rules>;
 
 export const MandateStatus = z.enum(["active", "paused", "revoked"]);
+export type MandateStatus = z.infer<typeof MandateStatus>;
 
 export const Mandate = z.object({
   id: z.string(),
@@ -198,13 +199,28 @@ export const VerifyResponse = z.object({
 });
 export type VerifyResponse = z.infer<typeof VerifyResponse>;
 
+export const ApprovalDecisionRequest = z.object({
+  approved: z.boolean(),
+});
+export type ApprovalDecisionRequest = z.infer<typeof ApprovalDecisionRequest>;
+
+export const ApprovalStatusResponse = z.object({
+  status: ApprovalStatus,
+});
+export type ApprovalStatusResponse = z.infer<typeof ApprovalStatusResponse>;
+
 export const LiveEventV2 = z.object({
   type: z.enum(["mandate", "check", "approval", "payment", "dispute", "agent"]),
   mandateId: z.string().optional(),
   cartId: z.string().optional(),
+  approvalId: z.string().optional(),
   decision: Decision.optional(),
   summary: z.string(),
   at: z.string(),
+  items: z.array(CartItem).optional(),
+  total: z.number().optional(),
+  reasons: z.array(z.string()).optional(),
+  riskScore: z.number().optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
 export type LiveEventV2 = z.infer<typeof LiveEventV2>;
