@@ -10,6 +10,8 @@
   },
   "scripts": {
     "api": "pnpm --filter @mandate/api dev",
+    "web": "pnpm --filter @mandate/web dev",
+    "web:build": "pnpm --filter @mandate/web build",
     "agent": "pnpm --filter @mandate/agent dev",
     "agent:server": "pnpm --filter @mandate/agent run server",
     "mcp": "pnpm --filter @mandate/agent mcp",
