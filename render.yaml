@@ -1,0 +1,81 @@
+# Render Blueprint for Mandate
+# Member 3: frontend + API + agent + Postgres
+services:
+  # Next.js Frontend Dashboard (Member 3)
+  - type: web
+    name: mandate-web
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install && pnpm --filter @mandate/web build
+    startCommand: pnpm --filter @mandate/web start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: mandate-api
+          property: host
+      - key: NEXT_PUBLIC_AGENT_URL
+        fromService:
+          type: web
+          name: mandate-agent
+          property: host
+
+  # Mandate API (Member 2)
+  - type: web
+    name: mandate-api
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install
+    startCommand: pnpm --filter @mandate/api start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mandate-db
+          property: connectionString
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: AGENT_URL
+        fromService:
+          type: web
+          name: mandate-agent
+          property: host
+
+  # Mandate Agent & Trick Detector Server (Member 1)
+  - type: web
+    name: mandate-agent
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install
+    startCommand: pnpm --filter @mandate/agent server
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: AGENT_PORT
+        value: 4100
+      - key: MOCK_API
+        value: "0"
+      - key: MANDATE_API_URL
+        fromService:
+          type: web
+          name: mandate-api
+          property: host
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+databases:
+  - name: mandate-db
+    plan: starter
+    databaseName: mandate
+    user: mandate
