@@ -7,6 +7,9 @@ import type {
   CreateOrderInput,
   CreateOrderOutput,
   CaptureOrderOutput,
+  VerifyWebhookInput,
+  ProvideEvidenceInput,
+  DisputeDetails,
 } from "./types.js";
 
 export class PayPalApiError extends Error {
@@ -63,6 +66,24 @@ const CreateOrderResponseSchema = z.object({
       })
     )
     .optional(),
+  purchase_units: z
+    .array(
+      z.object({
+        payments: z
+          .object({
+            captures: z
+              .array(
+                z.object({
+                  id: z.string(),
+                  status: z.string().optional(),
+                })
+              )
+              .optional(),
+          })
+          .optional(),
+      })
+    )
+    .optional(),
 });
 
 const CaptureOrderResponseSchema = z.object({
@@ -86,6 +107,24 @@ const CaptureOrderResponseSchema = z.object({
       })
     )
     .min(1),
+});
+
+const VerifyWebhookResponseSchema = z.object({
+  verification_status: z.string(),
+});
+
+const DisputeResponseSchema = z.object({
+  dispute_id: z.string().optional(),
+  id: z.string().optional(),
+  status: z.string(),
+  reason: z.string().optional(),
+  dispute_amount: z
+    .object({
+      value: z.string(),
+      currency_code: z.string(),
+    })
+    .optional(),
+  create_time: z.string().optional(),
 });
 
 export class SandboxPayPal implements PayPalClient {
@@ -228,7 +267,9 @@ export class SandboxPayPal implements PayPalClient {
     const body = {
       payment_source: {
         paypal: {
-          // VERIFY: experience_context usage_type for Vault v3 setup-tokens
+          // Vault v3: usage_type belongs directly under payment_source.paypal, not experience_context
+          // VERIFY: Vault v3 usage_type ("MERCHANT" vs "PLATFORM") depending on seller account configuration
+          usage_type: "MERCHANT",
           experience_context: {
             return_url: input.returnUrl,
             cancel_url: input.cancelUrl,
@@ -291,38 +332,30 @@ export class SandboxPayPal implements PayPalClient {
   }
 
   async createOrder(input: CreateOrderInput): Promise<CreateOrderOutput> {
-    const totalFormatted = (input.totalCents / 100).toFixed(2);
-    const itemTotalCents = input.items.reduce(
-      (sum, item) => sum + Math.round(item.unitPrice * 100) * item.qty,
-      0
-    );
-    const itemTotalFormatted = (itemTotalCents / 100).toFixed(2);
+    // Format money strings to 2 decimal places USD
+    const totalAmount = (input.totalCents / 100).toFixed(2);
+    const itemTotal = input.items
+      .reduce((sum, it) => sum + it.unitPrice * it.qty, 0)
+      .toFixed(2);
 
-    if (totalFormatted !== itemTotalFormatted) {
-      throw new Error(
-        `item_total must equal the sum of unit_amount*quantity: ${totalFormatted} !== ${itemTotalFormatted}`
-      );
-    }
-
-    // Orders v2 payload
     const purchaseUnit = {
       amount: {
         currency_code: "USD",
-        value: totalFormatted,
+        value: totalAmount,
         breakdown: {
           item_total: {
             currency_code: "USD",
-            value: itemTotalFormatted,
+            value: itemTotal,
           },
         },
       },
-      items: input.items.map((i) => ({
-        name: i.name,
+      items: input.items.map((it) => ({
+        name: it.name,
         unit_amount: {
           currency_code: "USD",
-          value: i.unitPrice.toFixed(2),
+          value: it.unitPrice.toFixed(2),
         },
-        quantity: String(i.qty),
+        quantity: it.qty.toString(),
       })),
     };
 
@@ -368,10 +401,14 @@ export class SandboxPayPal implements PayPalClient {
       (l) => l.rel === "payer-action" || l.rel === "approve"
     );
 
+    // If order was created with vault_id and intent CAPTURE, PayPal executes capture immediately and status is COMPLETED
+    const capture = parsed.purchase_units?.[0]?.payments?.captures?.[0];
+
     return {
       orderId: parsed.id,
       status: parsed.status,
       approveUrl: approveLink?.href,
+      captureId: capture?.id,
     };
   }
 
@@ -400,6 +437,112 @@ export class SandboxPayPal implements PayPalClient {
     return {
       captureId: capture.id,
       status: parsed.status,
+    };
+  }
+
+  async verifyWebhook(input: VerifyWebhookInput): Promise<boolean> {
+    const getHeader = (name: string): string | undefined => {
+      const target = name.toLowerCase();
+      for (const [k, v] of Object.entries(input.headers)) {
+        if (k.toLowerCase() === target) {
+          return Array.isArray(v) ? v[0] : v;
+        }
+      }
+      return undefined;
+    };
+
+    const transmissionId = getHeader("paypal-transmission-id");
+    const transmissionTime = getHeader("paypal-transmission-time");
+    const transmissionSig = getHeader("paypal-transmission-sig");
+    const certUrl = getHeader("paypal-cert-url");
+    const authAlgo = getHeader("paypal-auth-algo");
+
+    if (
+      !transmissionId ||
+      !transmissionTime ||
+      !transmissionSig ||
+      !certUrl ||
+      !authAlgo
+    ) {
+      return false;
+    }
+
+    let parsedEvent: unknown;
+    try {
+      parsedEvent = JSON.parse(input.rawBody);
+    } catch {
+      return false;
+    }
+
+    // VERIFY: POST /v1/notifications/verify-webhook-signature request body schema
+    const body = {
+      transmission_id: transmissionId,
+      transmission_time: transmissionTime,
+      transmission_sig: transmissionSig,
+      cert_url: certUrl,
+      auth_algo: authAlgo,
+      webhook_id: config.PAYPAL_WEBHOOK_ID ?? "",
+      webhook_event: parsedEvent,
+    };
+
+    const data = await this.request<unknown>(
+      "/v1/notifications/verify-webhook-signature",
+      "POST",
+      body,
+      transmissionId
+    );
+
+    const parsed = VerifyWebhookResponseSchema.parse(data);
+    return parsed.verification_status === "SUCCESS";
+  }
+
+  async getDispute(disputeId: string): Promise<DisputeDetails> {
+    // Official PayPal Disputes v1 endpoint
+    // VERIFY: GET /v1/customer/disputes/{disputeId} response fields
+    const data = await this.request<unknown>(
+      `/v1/customer/disputes/${disputeId}`,
+      "GET",
+      null,
+      disputeId
+    );
+
+    const parsed = DisputeResponseSchema.parse(data);
+    const amountCents = parsed.dispute_amount
+      ? Math.round(parseFloat(parsed.dispute_amount.value) * 100)
+      : undefined;
+
+    return {
+      disputeId: parsed.dispute_id || parsed.id || disputeId,
+      status: parsed.status,
+      reason: parsed.reason,
+      amountCents,
+      currency: parsed.dispute_amount?.currency_code,
+      createTime: parsed.create_time,
+      raw: data,
+    };
+  }
+
+  async provideEvidence(
+    disputeId: string,
+    input: ProvideEvidenceInput,
+    requestId: string
+  ): Promise<{ status: string }> {
+    // Official PayPal Disputes v1 provide-evidence endpoint
+    // VERIFY: POST /v1/customer/disputes/{id}/provide-evidence request payload structure
+    const body = {
+      note: input.notes,
+      evidence_type: input.evidenceType || "PROOF_OF_FULFILLMENT",
+    };
+
+    const data = await this.request<unknown>(
+      `/v1/customer/disputes/${disputeId}/provide-evidence`,
+      "POST",
+      body,
+      requestId
+    );
+
+    return {
+      status: "SUCCESS",
     };
   }
 }

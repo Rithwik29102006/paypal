@@ -17,6 +17,11 @@ async function wait(ms: number) {
 }
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    console.error("Refusing to run acceptance test in production environment");
+    process.exit(1);
+  }
+
   console.log("=== PHASE 4 LIVE ACCEPTANCE TEST ===");
 
   // 0. Seed mandate mdt_demo

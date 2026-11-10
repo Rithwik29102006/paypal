@@ -96,13 +96,18 @@ export async function payRoutes(
               existingPayment.requestId || randomUUID()
             );
 
-            const receipt = await appendReceipt(existingPayment.mandateId, "payment", {
-              cartId,
-              amountCents: existingPayment.amountCents,
-              orderId: existingPayment.paypalOrderId,
-              captureId: capture.captureId,
-              status: "captured",
-            });
+            const receipt = await appendReceipt(
+              existingPayment.mandateId,
+              "payment",
+              {
+                cartId,
+                paymentId: existingPayment.id,
+                paypalOrderId: existingPayment.paypalOrderId,
+                captureId: capture.captureId,
+                amountCents: existingPayment.amountCents,
+                status: "captured",
+              }
+            );
 
             const updated = await prisma.payment.update({
               where: { id: existingPayment.id },
@@ -265,9 +270,11 @@ export async function payRoutes(
           });
           await appendReceipt(mandate.id, "payment", {
             cartId: cart.id,
+            paymentId: payment.id,
+            paypalOrderId: `pending_${requestId}`,
+            captureId: null,
             amountCents: totalCents,
             status: "failed",
-            error: err instanceof Error ? err.message : String(err),
           });
           const debugId =
             err instanceof PayPalApiError ? err.debugId : undefined;
@@ -282,34 +289,45 @@ export async function payRoutes(
           data: { paypalOrderId: order.orderId },
         });
 
-        let capture;
-        try {
-          capture = await paypalClient.captureOrder(order.orderId, requestId);
-        } catch (err: unknown) {
-          await prisma.payment.update({
-            where: { id: payment.id },
-            data: { status: "failed" },
-          });
-          await appendReceipt(mandate.id, "payment", {
-            cartId: cart.id,
-            amountCents: totalCents,
-            orderId: order.orderId,
-            status: "failed",
-            error: err instanceof Error ? err.message : String(err),
-          });
-          const debugId =
-            err instanceof PayPalApiError ? err.debugId : undefined;
-          return reply.status(502).send({
-            error: "paypal error",
-            debugId,
-          });
+        // When order status is already COMPLETED (capture occurred during order creation), skip captureOrder
+        let captureId: string;
+        if (order.status === "COMPLETED" && order.captureId) {
+          captureId = order.captureId;
+        } else {
+          try {
+            const capture = await paypalClient.captureOrder(
+              order.orderId,
+              requestId
+            );
+            captureId = capture.captureId;
+          } catch (err: unknown) {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "failed" },
+            });
+            await appendReceipt(mandate.id, "payment", {
+              cartId: cart.id,
+              paymentId: payment.id,
+              paypalOrderId: order.orderId,
+              captureId: null,
+              amountCents: totalCents,
+              status: "failed",
+            });
+            const debugId =
+              err instanceof PayPalApiError ? err.debugId : undefined;
+            return reply.status(502).send({
+              error: "paypal error",
+              debugId,
+            });
+          }
         }
 
         const receipt = await appendReceipt(mandate.id, "payment", {
           cartId: cart.id,
+          paymentId: payment.id,
+          paypalOrderId: order.orderId,
+          captureId,
           amountCents: totalCents,
-          orderId: order.orderId,
-          captureId: capture.captureId,
           status: "captured",
         });
 
@@ -317,7 +335,7 @@ export async function payRoutes(
           where: { id: payment.id },
           data: {
             status: "captured",
-            captureId: capture.captureId,
+            captureId,
             receiptSeq: receipt.seq,
           },
         });
@@ -335,7 +353,7 @@ export async function payRoutes(
         return reply.status(200).send({
           paymentId: payment.id,
           paypalOrderId: order.orderId,
-          captureId: capture.captureId,
+          captureId,
           status: "captured",
           receiptSeq: receipt.seq,
         } satisfies PayResponse);
@@ -358,9 +376,11 @@ export async function payRoutes(
         });
         await appendReceipt(mandate.id, "payment", {
           cartId: cart.id,
+          paymentId: payment.id,
+          paypalOrderId: `pending_${requestId}`,
+          captureId: null,
           amountCents: totalCents,
           status: "failed",
-          error: err instanceof Error ? err.message : String(err),
         });
         const debugId =
           err instanceof PayPalApiError ? err.debugId : undefined;
@@ -377,34 +397,44 @@ export async function payRoutes(
 
       if (isMock) {
         // Auto-capture in mock mode
-        let capture;
-        try {
-          capture = await paypalClient.captureOrder(order.orderId, requestId);
-        } catch (err: unknown) {
-          await prisma.payment.update({
-            where: { id: payment.id },
-            data: { status: "failed" },
-          });
-          await appendReceipt(mandate.id, "payment", {
-            cartId: cart.id,
-            amountCents: totalCents,
-            orderId: order.orderId,
-            status: "failed",
-            error: err instanceof Error ? err.message : String(err),
-          });
-          const debugId =
-            err instanceof PayPalApiError ? err.debugId : undefined;
-          return reply.status(502).send({
-            error: "paypal error",
-            debugId,
-          });
+        let captureId: string;
+        if (order.status === "COMPLETED" && order.captureId) {
+          captureId = order.captureId;
+        } else {
+          try {
+            const capture = await paypalClient.captureOrder(
+              order.orderId,
+              requestId
+            );
+            captureId = capture.captureId;
+          } catch (err: unknown) {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "failed" },
+            });
+            await appendReceipt(mandate.id, "payment", {
+              cartId: cart.id,
+              paymentId: payment.id,
+              paypalOrderId: order.orderId,
+              captureId: null,
+              amountCents: totalCents,
+              status: "failed",
+            });
+            const debugId =
+              err instanceof PayPalApiError ? err.debugId : undefined;
+            return reply.status(502).send({
+              error: "paypal error",
+              debugId,
+            });
+          }
         }
 
         const receipt = await appendReceipt(mandate.id, "payment", {
           cartId: cart.id,
+          paymentId: payment.id,
+          paypalOrderId: order.orderId,
+          captureId,
           amountCents: totalCents,
-          orderId: order.orderId,
-          captureId: capture.captureId,
           status: "captured",
         });
 
@@ -412,7 +442,7 @@ export async function payRoutes(
           where: { id: payment.id },
           data: {
             status: "captured",
-            captureId: capture.captureId,
+            captureId,
             receiptSeq: receipt.seq,
           },
         });
@@ -430,7 +460,7 @@ export async function payRoutes(
         return reply.status(200).send({
           paymentId: payment.id,
           paypalOrderId: order.orderId,
-          captureId: capture.captureId,
+          captureId,
           status: "captured",
           receiptSeq: receipt.seq,
         } satisfies PayResponse);
@@ -496,9 +526,10 @@ export async function payRoutes(
 
       const receipt = await appendReceipt(payment.mandateId, "payment", {
         cartId: payment.cartId,
-        amountCents: payment.amountCents,
-        orderId: payment.paypalOrderId,
+        paymentId: payment.id,
+        paypalOrderId: payment.paypalOrderId,
         captureId: capture.captureId,
+        amountCents: payment.amountCents,
         status: "captured",
       });
 
@@ -535,10 +566,11 @@ export async function payRoutes(
       });
       await appendReceipt(payment.mandateId, "payment", {
         cartId: payment.cartId,
+        paymentId: payment.id,
+        paypalOrderId: payment.paypalOrderId,
+        captureId: null,
         amountCents: payment.amountCents,
-        orderId: payment.paypalOrderId,
         status: "failed",
-        error: err instanceof Error ? err.message : String(err),
       });
       const debugId =
         err instanceof PayPalApiError ? err.debugId : undefined;

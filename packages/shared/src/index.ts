@@ -161,10 +161,12 @@ export type DetectRequest = z.infer<typeof DetectRequest>;
 export const ReceiptType = z.enum([
   "mandate_created",
   "mandate_revoked",
+  "mandate_updated",
   "check",
   "approval",
   "payment",
   "dispute",
+  "dispute_evidence",
 ]);
 export type ReceiptType = z.infer<typeof ReceiptType>;
 

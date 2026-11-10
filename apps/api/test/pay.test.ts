@@ -147,15 +147,20 @@ describe("POST /pay and PayPal integration", () => {
     expect(mockPayPal.callCounts.createOrder).toBe(1);
     expect(mockPayPal.callCounts.captureOrder).toBe(1);
 
-    // Receipt written
+    // Receipt written with exact required shape {cartId, paymentId, paypalOrderId, captureId, amountCents, status}
     const receipt = await prisma.receipt.findFirst({
       where: { mandateId, type: "payment" },
     });
     expect(receipt).not.toBeNull();
     const payload = JSON.parse(receipt!.payload);
-    expect(payload.cartId).toBe(cartId);
-    expect(payload.amountCents).toBe(1000);
-    expect(payload.status).toBe("captured");
+    expect(payload).toEqual({
+      cartId,
+      paymentId: body.paymentId,
+      paypalOrderId: body.paypalOrderId,
+      captureId: body.captureId,
+      amountCents: 1000,
+      status: "captured",
+    });
 
     // SSE event emitted
     const paymentEvent = eventsReceived.find(
@@ -469,5 +474,85 @@ describe("POST /pay and PayPal integration", () => {
       where: { id: failedMandateId },
     });
     expect(dbRow).toBeNull();
+  });
+
+  it("vault order completed on create (completeOnCreate = true) skips captureOrder", async () => {
+    // Mandate has vaultId
+    await prisma.mandate.update({
+      where: { id: mandateId },
+      data: { vaultId: "MOCK-VAULT-COMPLETED" },
+    });
+
+    mockPayPal.completeOnCreate = true;
+    const cartId = `cart_vault_completed_${randomUUID().slice(0, 8)}`;
+    await createCart({ cartId, total: 12, decision: "allow" });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/pay",
+      payload: { cartId },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("captured");
+    expect(mockPayPal.callCounts.createOrder).toBe(1);
+    // captureOrder was skipped because createOrder already returned status COMPLETED and captureId!
+    expect(mockPayPal.callCounts.captureOrder).toBe(0);
+  });
+
+  it("vault order not completed on create (completeOnCreate = false) calls captureOrder", async () => {
+    await prisma.mandate.update({
+      where: { id: mandateId },
+      data: { vaultId: "MOCK-VAULT-2" },
+    });
+
+    mockPayPal.completeOnCreate = false;
+    const cartId = `cart_vault_manual_${randomUUID().slice(0, 8)}`;
+    await createCart({ cartId, total: 14, decision: "allow" });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/pay",
+      payload: { cartId },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("captured");
+    expect(mockPayPal.callCounts.createOrder).toBe(1);
+    expect(mockPayPal.callCounts.captureOrder).toBe(1);
+  });
+
+  it("POST /approvals/:id and POST /approvals/:id/decision both work", async () => {
+    const cartId1 = `cart_app_route_1_${randomUUID().slice(0, 8)}`;
+    await createCart({ cartId: cartId1, total: 80, decision: "needs_approval" });
+    const approvalId1 = `app_route_1_${randomUUID().slice(0, 8)}`;
+    await prisma.approval.create({
+      data: { id: approvalId1, cartId: cartId1, status: "pending" },
+    });
+
+    // Test POST /approvals/:id
+    const res1 = await server.inject({
+      method: "POST",
+      url: `/approvals/${approvalId1}`,
+      payload: { approved: true },
+    });
+    expect(res1.statusCode).toBe(200);
+    expect(res1.json().status).toBe("approved");
+
+    const cartId2 = `cart_app_route_2_${randomUUID().slice(0, 8)}`;
+    await createCart({ cartId: cartId2, total: 85, decision: "needs_approval" });
+    const approvalId2 = `app_route_2_${randomUUID().slice(0, 8)}`;
+    await prisma.approval.create({
+      data: { id: approvalId2, cartId: cartId2, status: "pending" },
+    });
+
+    // Test POST /approvals/:id/decision
+    const res2 = await server.inject({
+      method: "POST",
+      url: `/approvals/${approvalId2}/decision`,
+      payload: { approved: true },
+    });
+    expect(res2.statusCode).toBe(200);
+    expect(res2.json().status).toBe("approved");
   });
 });
