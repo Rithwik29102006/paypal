@@ -211,14 +211,19 @@ export default function ReceiptsPage() {
 
                   {/* Quick Highlight of Key Fields */}
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-slate-800 font-mono text-[11px]">
-                    {r.type === "payment" && (
+                    {r.type === "payment" && r.payload.tampered !== true && (
                       <p>
                         Order: <strong>{r.payload.paypalOrderId}</strong> · Amount:{" "}
                         <strong className="text-emerald-700 font-bold">${r.payload.amount}</strong> ·
                         Status: {r.payload.status}
                       </p>
                     )}
-                    {r.type === "check" && (
+                    {r.payload.tampered === true && (
+                      <p className="text-rose-700 font-bold">
+                        This receipt was modified after it was written. Run Verify to see the chain break here.
+                      </p>
+                    )}
+                    {r.type === "check" && r.payload.tampered !== true && (
                       <p>
                         Decision:{" "}
                         <strong
@@ -230,7 +235,7 @@ export default function ReceiptsPage() {
                               : "text-amber-600"
                           }
                         >
-                          {r.payload.decision.toUpperCase()}
+                          {String(r.payload.decision ?? "?").toUpperCase()}
                         </strong>{" "}
                         · Risk: {r.payload.riskScore} · {r.payload.reasons?.[0]}
                       </p>
@@ -238,13 +243,12 @@ export default function ReceiptsPage() {
                     {r.type === "mandate_created" && (
                       <p>
                         Mandate: <strong>{r.payload.mandateId}</strong> · Cap: $
-                        {r.payload.rules?.monthlyCap} · Vault: {r.payload.vaultId?.slice(0, 16)}...
+                        {r.payload.rules?.monthlyCap ?? "-"} · Vault: {r.payload.vaultId ? `${String(r.payload.vaultId).slice(0, 16)}...` : "not connected"}
                       </p>
                     )}
-                    {r.type === "approval" && (
+                    {r.type === "approval" && r.payload.tampered !== true && (
                       <p>
-                        Status: <strong>{r.payload.status}</strong> · Decided by:{" "}
-                        {r.payload.approvedBy}
+                        Status: <strong>{r.payload.status ?? r.payload.decision}</strong> · Approval {r.payload.approvalId ?? ""}
                       </p>
                     )}
                   </div>

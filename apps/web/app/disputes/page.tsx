@@ -167,7 +167,7 @@ export default function DisputesPage() {
                     >
                       {isWon ? "✓" : "3"}
                     </span>
-                    <span>3. Demo submission simulated</span>
+                    <span>3. Submitted to PayPal</span>
                   </div>
                   <div className="flex-1 h-0.5 mx-3 bg-slate-200" />
 

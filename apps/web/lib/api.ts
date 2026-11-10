@@ -91,7 +91,7 @@ export async function getReceipts(mandateId: string): Promise<Receipt[]> {
     }
     if (typeof payload.amountCents === "number" && payload.amount === undefined) payload.amount = (payload.amountCents / 100).toFixed(2);
     if (r.type.startsWith("mandate") && !payload.mandateId) payload.mandateId = mandateId;
-    return { seq: r.seq, type: r.type as Receipt["type"], payload, prevHash: r.prevHash, hash: r.hash, createdAt: r.createdAt };
+    return { seq: r.seq, type: r.type as Receipt["type"], payload, prevHash: r.prevHash, hash: r.hash, createdAt: r.createdAt, tampered: payload.tampered === true };
   });
 }
 

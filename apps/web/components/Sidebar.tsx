@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { mandate, approvals, disputes, backendConnected } = useMandate();
+  const { mandate, approvals, disputes, apiConnected, agentConnected } = useMandate();
 
   const pendingCount = approvals.filter((a) => a.status === "pending").length;
   const activeDisputesCount = disputes.filter((d) => d.status === "open").length;
@@ -95,8 +95,15 @@ export function Sidebar() {
             <CreditCard className="w-3.5 h-3.5 text-brand-400" />
             Anita Sharma
           </span>
-          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded-full">
-            Vault Linked
+          <span
+            className={cn(
+              "text-[10px] font-bold px-1.5 py-0.5 rounded-full border",
+              mandate.vaultId
+                ? "text-emerald-400 bg-emerald-950/60 border-emerald-800/40"
+                : "text-amber-300 bg-amber-950/40 border-amber-800/40"
+            )}
+          >
+            {mandate.vaultId ? "PayPal Saved" : "PayPal Not Saved"}
           </span>
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -139,20 +146,20 @@ export function Sidebar() {
 
       {/* Footer System Status */}
       <div className="p-4 border-t border-slate-800 text-xs space-y-2">
-        <div className="flex items-center justify-between text-slate-400">
-          <span className="flex items-center gap-1.5">
-            <Circle
-              className={cn(
-                "w-2 h-2 fill-current",
-                backendConnected ? "text-emerald-400" : "text-amber-400 animate-pulse"
-              )}
-            />
-            {backendConnected ? "Agent Server :4100" : "Agent Server Mock"}
-          </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 bg-slate-800 rounded text-slate-300">
-            {backendConnected ? "LIVE" : "DEMO"}
-          </span>
-        </div>
+        {[
+          { label: "Mandate API", up: apiConnected },
+          { label: "Agent server", up: agentConnected },
+        ].map((svc) => (
+          <div key={svc.label} className="flex items-center justify-between text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Circle className={cn("w-2 h-2 fill-current", svc.up ? "text-emerald-400" : "text-rose-400 animate-pulse")} />
+              {svc.label}
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 bg-slate-800 rounded text-slate-300">
+              {svc.up ? "LIVE" : "OFFLINE"}
+            </span>
+          </div>
+        ))}
         <div className="text-[11px] text-slate-500 flex items-center justify-between">
           <span>PayPal Hackathon '26</span>
           <span className="text-[10px] text-slate-400 font-mono">USD Sandbox</span>

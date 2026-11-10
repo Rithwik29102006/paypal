@@ -150,12 +150,14 @@ export default function ApprovalsPage() {
                   </div>
 
                   {/* Agent Reasoning */}
+                  {item.cart.agentReasoning && (
                   <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <strong className="text-slate-800 font-semibold block mb-0.5">
                       Agent's stated reasoning:
                     </strong>
                     <p className="italic">"{item.cart.agentReasoning}"</p>
                   </div>
+                  )}
 
                   {/* Cart Items Table */}
                   <div>
@@ -211,7 +213,7 @@ export default function ApprovalsPage() {
                   {isPending ? (
                     <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                       <span className="text-xs text-slate-500">
-                        Approving charges your saved PayPal Vault account (<strong>{mandate.vaultId?.slice(0, 16)}...</strong>).
+                        {mandate.vaultId ? (<>Approving charges your saved PayPal account (<strong>{mandate.vaultId.slice(0, 16)}...</strong>).</>) : (<>No PayPal account saved yet: after approval, PayPal asks the buyer to approve the order.</>)}
                       </span>
 
                       <div className="flex gap-2">

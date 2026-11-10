@@ -287,8 +287,7 @@ export default function DashboardPage() {
             <div className="divide-y divide-slate-100 mt-2">
               {receipts
                 .filter((r) => r.type === "check" || r.type === "payment")
-                .slice(-5)
-                .reverse()
+                .slice(0, 5) /* API returns newest first */
                 .map((r) => {
                   const isCheck = r.type === "check";
                   const decision = r.payload.decision;
@@ -319,7 +318,7 @@ export default function DashboardPage() {
                             <span className="text-xs font-bold text-slate-800">
                               {isPayment
                                 ? `Captured PayPal Order ${r.payload.paypalOrderId}`
-                                : `Cart Check: ${decision.toUpperCase()}`}
+                                : `Cart Check: ${String(decision ?? "modified").toUpperCase()}`}
                             </span>
                             <span className="text-[10px] text-slate-400 font-mono">
                               seq #{r.seq}
