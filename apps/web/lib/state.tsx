@@ -251,7 +251,7 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
   const tamperReceipt = (seq: number) => {
     addEvent({
       type: "agent",
-      summary: `To tamper with receipt #${seq}, run in a terminal: pnpm tamper -- ${seq}   then click Verify`,
+      summary: `To tamper with receipt #${seq}, run in a terminal: pnpm tamper ${seq}   then click Verify`,
       at: new Date().toISOString(),
     });
   };

@@ -65,7 +65,7 @@ In the sandbox, a dispute can be driven to an outcome with PayPal's sandbox-only
 | Command | What it does |
 | --- | --- |
 | `pnpm --filter @mandate/api seed` | Create (or repair) mandate `mdt_demo` for user `anita` |
-| `pnpm --filter @mandate/api tamper -- <seq>` | Dev only: edit one receipt so `/receipts/verify` reports it |
+| `pnpm --filter @mandate/api tamper <seq>` | Dev only: edit one receipt so `/receipts/verify` reports it |
 | `pnpm --filter @mandate/api replay:dispute -- [cartId] [--win]` | **Mock mode only.** Replays a recorded dispute webhook against the latest captured payment. Output is labelled REPLAY: it is not a real PayPal dispute |
 | `pnpm --filter @mandate/api import:dispute -- <PP-D-...>` | **Sandbox.** Fetches a real sandbox dispute by id and defends it, without needing the webhook to reach you |
 
