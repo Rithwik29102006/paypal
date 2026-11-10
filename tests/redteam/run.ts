@@ -54,7 +54,7 @@ function clientFor(c: Case): MandateClient {
 }
 
 function toGot(o: PaymentOutcome): Got {
-  if (o.status === "paid") return "allow";
+  if (o.status === "paid" || o.status === "awaiting_buyer_approval") return "allow";
   if (o.status === "rejected_by_user" || o.status === "approval_timeout") return "needs_approval";
   if (o.status === "blocked" || o.status === "refused_locally") return "block";
   return "error";
