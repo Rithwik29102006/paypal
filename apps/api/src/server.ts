@@ -1,6 +1,8 @@
 import fastify, { type FastifyInstance, type FastifyError } from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
+import { mandateRoutes } from "./routes/mandates.js";
+import { receiptRoutes } from "./routes/receipts.js";
 
 export async function buildServer(): Promise<FastifyInstance> {
   const server = fastify({
@@ -31,6 +33,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   server.get("/health", async () => {
     return { ok: true };
   });
+
+  // Domain routes
+  await server.register(mandateRoutes);
+  await server.register(receiptRoutes);
 
   return server;
 }

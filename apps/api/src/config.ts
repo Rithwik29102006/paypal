@@ -1,26 +1,40 @@
 import "dotenv/config";
 import { z } from "zod";
 
-const envSchema = z
-  .object({
-    PORT: z
-      .string()
-      .default("4000")
-      .transform((val) => {
-        const n = parseInt(val, 10);
-        if (isNaN(n)) throw new Error("PORT must be a valid number");
-        return n;
-      }),
-    DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-    DETECTOR_URL: z.string().default("http://localhost:4100"),
-    WEB_ORIGIN: z.string().default("http://localhost:3000"),
-    API_PUBLIC_URL: z.string().default("http://localhost:4000"),
-    PAYPAL_MODE: z.enum(["mock", "sandbox"]).default("mock"),
-    SIGNING_KEY: z.string().optional(),
-    PAYPAL_CLIENT_ID: z.string().optional(),
-    PAYPAL_CLIENT_SECRET: z.string().optional(),
-    PAYPAL_WEBHOOK_ID: z.string().optional(),
-  })
+const baseSchema = z.object({
+  PORT: z
+    .string()
+    .default("4000")
+    .transform((val) => {
+      const n = parseInt(val, 10);
+      if (isNaN(n)) throw new Error("PORT must be a valid number");
+      return n;
+    }),
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  DETECTOR_URL: z.string().default("http://localhost:4100"),
+  WEB_ORIGIN: z.string().default("http://localhost:3000"),
+  API_PUBLIC_URL: z.string().default("http://localhost:4000"),
+  PAYPAL_MODE: z.enum(["mock", "sandbox"]).default("mock"),
+  SIGNING_KEY: z.string().optional(),
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
+  PAYPAL_RETURN_URL: z.string().optional(),
+  PAYPAL_CANCEL_URL: z.string().optional(),
+});
+
+const envSchema = baseSchema
+  .transform((data) => ({
+    ...data,
+    PAYPAL_RETURN_URL:
+      data.PAYPAL_RETURN_URL && data.PAYPAL_RETURN_URL.length > 0
+        ? data.PAYPAL_RETURN_URL
+        : `${data.WEB_ORIGIN}/paypal/return`,
+    PAYPAL_CANCEL_URL:
+      data.PAYPAL_CANCEL_URL && data.PAYPAL_CANCEL_URL.length > 0
+        ? data.PAYPAL_CANCEL_URL
+        : `${data.WEB_ORIGIN}/paypal/cancel`,
+  }))
   .superRefine((data, ctx) => {
     if (data.PAYPAL_MODE === "sandbox") {
       if (!data.PAYPAL_CLIENT_ID) {
