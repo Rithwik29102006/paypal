@@ -83,8 +83,13 @@ const server = createServer(async (req, res) => {
           "access-control-allow-origin": "*",
         });
         const write = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-        const result = await runAgent({ request, mandateId, client, onEvent: write });
-        write({ type: "result", text: result.text });
+        try {
+          const result = await runAgent({ request, mandateId, client, onEvent: write });
+          write({ type: "result", text: result.text });
+        } catch (err) {
+          // Headers are already sent, so report the failure inside the stream.
+          write({ type: "error", summary: `Agent failed: ${(err as Error).message}` });
+        }
         return res.end();
       }
 

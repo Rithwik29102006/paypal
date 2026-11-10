@@ -1,81 +1,101 @@
-# Render Blueprint for Mandate
-# Member 3: frontend + API + agent + Postgres
-services:
-  # Next.js Frontend Dashboard (Member 3)
-  - type: web
-    name: mandate-web
-    runtime: node
-    plan: starter
-    buildCommand: pnpm install && pnpm --filter @mandate/web build
-    startCommand: pnpm --filter @mandate/web start
-    envVars:
-      - key: NODE_VERSION
-        value: 20
-      - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: mandate-api
-          property: host
-      - key: NEXT_PUBLIC_AGENT_URL
-        fromService:
-          type: web
-          name: mandate-agent
-          property: host
+# Render Blueprint for Mandate: web dashboard, Mandate API, agent/detector.
+#
+# First deploy (values marked sync:false are asked for in the Render dashboard):
+#   1. Deploy the blueprint once. Note the three public URLs Render gives you,
+#      e.g. https://mandate-api.onrender.com (names can differ if taken).
+#   2. Fill in the sync:false URLs below with those https URLs, then redeploy.
+#      NEXT_PUBLIC_* values are baked in at build time, so the web service
+#      must be rebuilt after you change them.
+#   3. In the PayPal developer app, set the webhook URL to
+#      <API URL>/webhooks/paypal and put its id in PAYPAL_WEBHOOK_ID.
+#
+# Database: SQLite on a persistent disk (the Prisma schema is SQLite; Render's
+# own disk is wiped on redeploy, so the DB lives on /var/data).
 
-  # Mandate API (Member 2)
+services:
+  # Mandate API (Member 2): the only service with PayPal credentials
   - type: web
     name: mandate-api
     runtime: node
     plan: starter
-    buildCommand: pnpm install
-    startCommand: pnpm --filter @mandate/api start
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @mandate/api exec prisma generate
+    startCommand: pnpm --filter @mandate/api exec prisma migrate deploy && pnpm --filter @mandate/api seed && pnpm --filter @mandate/api start
+    healthCheckPath: /health
+    disk:
+      name: mandate-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: "20"
       - key: PORT
-        value: 4000
+        value: "4000"
       - key: DATABASE_URL
-        fromDatabase:
-          name: mandate-db
-          property: connectionString
+        value: file:/var/data/mandate.db
+      - key: PAYPAL_MODE
+        value: sandbox
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
-      - key: AGENT_URL
-        fromService:
-          type: web
-          name: mandate-agent
-          property: host
+      # Generate once locally and keep it: a new key invalidates every stored mandate.
+      #   node -e "const c=require('crypto');console.log(Buffer.from(c.generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'})).toString('base64'))"
+      - key: SIGNING_KEY
+        sync: false
+      # Public https URLs of the other two services (see step 2)
+      - key: DETECTOR_URL
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      # Optional: defaults to WEB_ORIGIN + /paypal/return and /paypal/cancel
+      - key: PAYPAL_RETURN_URL
+        sync: false
+      - key: PAYPAL_CANCEL_URL
+        sync: false
 
-  # Mandate Agent & Trick Detector Server (Member 1)
+  # Agent + trick detector (Member 1)
   - type: web
     name: mandate-agent
     runtime: node
     plan: starter
-    buildCommand: pnpm install
-    startCommand: pnpm --filter @mandate/agent server
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @mandate/agent start
+    healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: "20"
       - key: AGENT_PORT
-        value: 4100
+        value: "4100"
       - key: MOCK_API
         value: "0"
-      - key: MANDATE_API_URL
-        fromService:
-          type: web
-          name: mandate-api
-          property: host
+      - key: MANDATE_ID
+        value: mdt_demo
+      - key: LLM_PROVIDER
+        value: anthropic
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: OPENAI_API_KEY
+      # Public https URL of mandate-api
+      - key: MANDATE_API_URL
         sync: false
 
-databases:
-  - name: mandate-db
+  # Dashboard (Member 3)
+  - type: web
+    name: mandate-web
+    runtime: node
     plan: starter
-    databaseName: mandate
-    user: mandate
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @mandate/web build
+    startCommand: pnpm --filter @mandate/web exec next start -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_MANDATE_ID
+        value: mdt_demo
+      # Public https URLs (baked in at build time)
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_AGENT_URL
+        sync: false
