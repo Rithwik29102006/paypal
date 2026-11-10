@@ -480,7 +480,8 @@ describe("POST /pay and PayPal integration", () => {
     // Mandate has vaultId
     await prisma.mandate.update({
       where: { id: mandateId },
-      data: { vaultId: "MOCK-VAULT-COMPLETED" },
+      // Re-sign: the signature covers vaultId, so changing it alone would (correctly) fail verification.
+      data: { vaultId: "MOCK-VAULT-COMPLETED", signature: signMandate(testRules, mandateId, "2026-01-01T00:00:00.000Z", "MOCK-VAULT-COMPLETED") },
     });
 
     mockPayPal.completeOnCreate = true;
@@ -503,7 +504,8 @@ describe("POST /pay and PayPal integration", () => {
   it("vault order not completed on create (completeOnCreate = false) calls captureOrder", async () => {
     await prisma.mandate.update({
       where: { id: mandateId },
-      data: { vaultId: "MOCK-VAULT-2" },
+      // Re-sign: the signature covers vaultId, so changing it alone would (correctly) fail verification.
+      data: { vaultId: "MOCK-VAULT-2", signature: signMandate(testRules, mandateId, "2026-01-01T00:00:00.000Z", "MOCK-VAULT-2") },
     });
 
     mockPayPal.completeOnCreate = false;
