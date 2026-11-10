@@ -33,6 +33,7 @@ export const Rules = z.object({
 export type Rules = z.infer<typeof Rules>;
 
 export const MandateStatus = z.enum(["active", "paused", "revoked"]);
+export type MandateStatus = z.infer<typeof MandateStatus>;
 
 export const Mandate = z.object({
   id: z.string(),
@@ -152,3 +153,74 @@ export const DetectRequest = z.object({
   pageText: z.string().default(""),
 });
 export type DetectRequest = z.infer<typeof DetectRequest>;
+
+
+// ---------- Additive additions for Phase 2 ----------
+
+export const ReceiptType = z.enum([
+  "mandate_created",
+  "mandate_revoked",
+  "check",
+  "approval",
+  "payment",
+  "dispute",
+]);
+export type ReceiptType = z.infer<typeof ReceiptType>;
+
+export const Receipt = z.object({
+  id: z.string(),
+  mandateId: z.string(),
+  seq: z.number().int().positive(),
+  type: z.string(),
+  payload: z.string(),
+  prevHash: z.string(),
+  hash: z.string(),
+  createdAt: z.string(),
+});
+export type Receipt = z.infer<typeof Receipt>;
+
+export const CreateMandateRequest = z.object({
+  userId: z.string(),
+  rules: Rules,
+  id: z.string().optional(),
+});
+export type CreateMandateRequest = z.infer<typeof CreateMandateRequest>;
+
+export const CreateMandateResponse = z.object({
+  mandate: Mandate,
+  approveUrl: z.string().nullable(),
+});
+export type CreateMandateResponse = z.infer<typeof CreateMandateResponse>;
+
+export const VerifyResponse = z.object({
+  ok: z.boolean(),
+  brokenSeq: z.number().int().nullable().optional(),
+  checked: z.number().int().nonnegative(),
+});
+export type VerifyResponse = z.infer<typeof VerifyResponse>;
+
+export const ApprovalDecisionRequest = z.object({
+  approved: z.boolean(),
+});
+export type ApprovalDecisionRequest = z.infer<typeof ApprovalDecisionRequest>;
+
+export const ApprovalStatusResponse = z.object({
+  status: ApprovalStatus,
+});
+export type ApprovalStatusResponse = z.infer<typeof ApprovalStatusResponse>;
+
+export const LiveEventV2 = z.object({
+  type: z.enum(["mandate", "check", "approval", "payment", "dispute", "agent"]),
+  mandateId: z.string().optional(),
+  cartId: z.string().optional(),
+  approvalId: z.string().optional(),
+  decision: Decision.optional(),
+  summary: z.string(),
+  at: z.string(),
+  items: z.array(CartItem).optional(),
+  total: z.number().optional(),
+  reasons: z.array(z.string()).optional(),
+  riskScore: z.number().optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+});
+export type LiveEventV2 = z.infer<typeof LiveEventV2>;

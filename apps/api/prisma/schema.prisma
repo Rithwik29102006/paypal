@@ -1,0 +1,102 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Mandate {
+  id             String    @id
+  userId         String
+  rulesJson      String
+  signature      String
+  publicKey      String
+  vaultId        String?
+  status         String    @default("active")
+  spentThisMonth Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  receipts       Receipt[]
+}
+
+model Cart {
+  id          String    @id
+  mandateId   String
+  requestJson String
+  decision    String
+  reasonsJson String
+  riskScore   Float
+  totalCents  Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  approval    Approval?
+  payment     Payment?
+}
+
+model Approval {
+  id        String    @id
+  cartId    String    @unique
+  cart      Cart      @relation(fields: [cartId], references: [id])
+  status    String    @default("pending")
+  decidedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Payment {
+  id            String    @id
+  cartId        String    @unique
+  cart          Cart      @relation(fields: [cartId], references: [id])
+  mandateId     String
+  amountCents   Int
+  currency      String    @default("USD")
+  paypalOrderId String
+  captureId     String?
+  status        String
+  receiptSeq    Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  disputes      Dispute[]
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  mandateId String
+  mandate   Mandate  @relation(fields: [mandateId], references: [id])
+  seq       Int
+  type      String
+  payload   String
+  prevHash  String
+  hash      String
+  createdAt DateTime @default(now())
+
+  @@unique([mandateId, seq])
+}
+
+model Dispute {
+  id           String    @id
+  disputeId    String    @unique
+  paymentId    String?
+  payment      Payment?  @relation(fields: [paymentId], references: [id])
+  captureId    String?
+  status       String
+  reason       String?
+  amountCents  Int?
+  currency     String    @default("USD")
+  evidenceJson String?
+  submittedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  eventId    String   @unique
+  eventType  String
+  resourceId String?
+  payload    String
+  status     String   @default("processed")
+  createdAt  DateTime @default(now())
+}
