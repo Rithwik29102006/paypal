@@ -120,6 +120,7 @@ export const PayResponse = z.object({
   captureId: z.string().nullable(),
   status: z.enum(["created", "captured", "failed"]),
   receiptSeq: z.number().int().optional(),
+  approveUrl: z.string().optional(),
 });
 export type PayResponse = z.infer<typeof PayResponse>;
 

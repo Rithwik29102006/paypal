@@ -62,6 +62,7 @@ export async function seedMandateDemo() {
       rulesJson: canonicalJson(DEMO_RULES),
       signature,
       publicKey,
+      setupTokenId: "MOCK-SETUP-DEMO",
       vaultId: null,
       status: "active",
       spentThisMonth: 0,
@@ -79,11 +80,13 @@ export async function seedMandateDemo() {
   console.log("Seeded mandate mdt_demo for user anita with valid Ed25519 signature and receipt chain.");
 }
 
-seedMandateDemo()
-  .catch((err) => {
-    console.error("Seed error:", err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+if (process.argv[1]?.includes("seed")) {
+  seedMandateDemo()
+    .catch((err) => {
+      console.error("Seed error:", err);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

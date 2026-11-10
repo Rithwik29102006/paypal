@@ -58,7 +58,7 @@ describe("Mandate and Receipt Routes", () => {
     expect(body.mandate.status).toBe("active");
     expect(body.mandate.signature).toBeDefined();
     expect(body.mandate.publicKey).toBeDefined();
-    expect(body.approveUrl).toBeNull();
+    expect(typeof body.approveUrl).toBe("string");
 
     // Verify receipt was written
     const receiptRes = await server.inject({
