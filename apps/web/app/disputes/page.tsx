@@ -49,9 +49,9 @@ export default function DisputesPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200">
-          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          <span>PayPal Disputes API Integrated</span>
+        <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+          <AlertTriangle className="w-4 h-4 text-amber-600" />
+          <span>PayPal Disputes API: Simulated Demo (apps/api not connected)</span>
         </div>
       </div>
 
@@ -75,12 +75,14 @@ export default function DisputesPage() {
                       isWon
                         ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                         : isSubmitted
-                        ? "bg-sky-50 text-sky-800 border-sky-200"
+                        ? "bg-amber-50 text-amber-800 border-amber-200"
                         : "bg-rose-50 text-rose-800 border-rose-200"
                     }`}
                   >
-                    {d.status === "evidence_submitted"
-                      ? "Evidence Submitted"
+                    {isWon
+                      ? "WON (SIMULATED)"
+                      : isSubmitted
+                      ? "DEMO SUBMISSION SIMULATED"
                       : d.status.toUpperCase()}
                   </span>
                   <span className="font-mono text-xs font-bold text-slate-800">
@@ -135,14 +137,16 @@ export default function DisputesPage() {
                   >
                     <span
                       className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isSubmitted || isWon
+                        isWon
+                          ? "bg-slate-800 text-white"
+                          : isSubmitted
                           ? "bg-brand-600 text-white"
                           : "bg-slate-200 text-slate-500"
                       }`}
                     >
                       {isWon ? "✓" : "3"}
                     </span>
-                    <span>3. Submitted to PayPal</span>
+                    <span>3. Demo submission simulated</span>
                   </div>
                   <div className="flex-1 h-0.5 mx-3 bg-slate-200" />
 
@@ -157,7 +161,7 @@ export default function DisputesPage() {
                         isWon ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"
                       }`}
                     >
-                      4
+                      {isWon ? "✓" : "4"}
                     </span>
                     <span>4. Dispute Won</span>
                   </div>
@@ -186,12 +190,19 @@ export default function DisputesPage() {
                 </div>
 
                 {isWon && (
-                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl flex items-center gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                    <div>
-                      <strong className="block text-sm">Dispute Successfully Won & Closed!</strong>
-                      <p className="text-xs text-emerald-800 mt-0.5">
-                        PayPal verified the cryptographic receipt chain and signed mandate. Funds were protected and no chargeback penalty was assessed.
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong className="block text-sm font-bold text-emerald-950">
+                          SIMULATED DEMO — PayPal API not connected
+                        </strong>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-200/70 text-emerald-900 uppercase">
+                          Demo Outcome: Won
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-800 leading-relaxed">
+                        The evidence package (Ed25519-signed rules, SHA-256 receipt chain slice, and /check decision) was compiled and verified locally. Once Member 2's backend is connected, this exact package is dispatched via PayPal's Disputes API (<code className="font-mono bg-emerald-100/60 px-1 py-0.5 rounded text-[11px]">POST /v1/customer/disputes/&#123;id&#125;/provide-evidence</code>).
                       </p>
                     </div>
                   </div>
@@ -219,9 +230,9 @@ export default function DisputesPage() {
                   )}
 
                   {isSubmitted && (
-                    <span className="text-sky-700 font-semibold flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
-                      Under PayPal Review (Estimated 3s)
+                    <span className="text-amber-700 font-semibold flex items-center gap-1.5 text-xs">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      Demo submission simulated (Simulating review...)
                     </span>
                   )}
                 </div>

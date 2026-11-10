@@ -398,18 +398,18 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
 
     addEvent({
       type: "dispute",
-      summary: `Evidence package built and submitted to PayPal Disputes API for ${disp.paypalDisputeId}`,
+      summary: `Demo evidence package built for ${disp.paypalDisputeId} (submission simulated)`,
       at: new Date().toISOString(),
     });
 
-    // Simulate winning the dispute after 3 seconds for realistic presentation
+    // Simulate winning the dispute after 3.5 seconds for realistic presentation
     setTimeout(() => {
       setDisputes((prev) =>
         prev.map((d) => (d.id === id ? { ...d, status: "won" } : d))
       );
       addEvent({
         type: "dispute",
-        summary: `Dispute ${disp.paypalDisputeId} WON! PayPal verified signed mandate & receipt chain.`,
+        summary: `SIMULATED DEMO: Dispute ${disp.paypalDisputeId} resolved as WON (PayPal API not connected)`,
         at: new Date().toISOString(),
       });
     }, 3500);
