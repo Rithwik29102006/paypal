@@ -16,8 +16,10 @@ import type { MandateClient } from "./mandateClient.js";
 import { getProduct, mentionsSku, pageUrl } from "./store.js";
 
 export interface PaymentOutcome {
-  status: "paid" | "blocked" | "rejected_by_user" | "approval_timeout" | "refused_locally" | "error";
+  status: "paid" | "awaiting_buyer_approval" | "blocked" | "rejected_by_user" | "approval_timeout" | "refused_locally" | "error";
   message: string;
+  /** PayPal link the buyer must open when no saved payment method exists yet. */
+  approveUrl?: string;
   cartId?: string;
   reasons?: string[];
   riskScore?: number;
@@ -112,14 +114,32 @@ export class AgentSession {
 
     try {
       const pay = await this.client.pay(check.cartId);
-      this.emit({ type: "payment", cartId: check.cartId, summary: `Paid $${cart.total.toFixed(2)} via PayPal (order ${pay.paypalOrderId})` });
-      return {
-        status: "paid",
-        cartId: check.cartId,
-        paypalOrderId: pay.paypalOrderId,
-        total: cart.total,
-        message: `Paid $${cart.total.toFixed(2)} through PayPal.`,
-      };
+
+      // Only "captured" means money moved. Without a saved PayPal payment
+      // method, the API creates the order and returns a link the buyer must
+      // approve first (fallback path); a "failed" payment is an error.
+      if (pay.status === "captured") {
+        this.emit({ type: "payment", cartId: check.cartId, summary: `Paid $${cart.total.toFixed(2)} via PayPal (order ${pay.paypalOrderId})` });
+        return {
+          status: "paid",
+          cartId: check.cartId,
+          paypalOrderId: pay.paypalOrderId,
+          total: cart.total,
+          message: `Paid $${cart.total.toFixed(2)} through PayPal.`,
+        };
+      }
+      if (pay.status === "created") {
+        this.emit({ type: "payment", cartId: check.cartId, summary: `PayPal order ${pay.paypalOrderId} created for $${cart.total.toFixed(2)}; waiting for the buyer to approve it in PayPal` });
+        return {
+          status: "awaiting_buyer_approval",
+          cartId: check.cartId,
+          paypalOrderId: pay.paypalOrderId,
+          approveUrl: pay.approveUrl,
+          total: cart.total,
+          message: "Mandate allowed this purchase, but nothing is paid yet: the user must approve the PayPal order (no saved payment method). Tell the user.",
+        };
+      }
+      return { status: "error", cartId: check.cartId, paypalOrderId: pay.paypalOrderId, message: `PayPal payment ${pay.status}; nothing was charged.` };
     } catch (err) {
       return { status: "error", cartId: check.cartId, message: (err as Error).message };
     }
