@@ -23,8 +23,8 @@ export async function approvalRoutes(server: FastifyInstance) {
     });
   });
 
-  // POST /approvals/:id -> { approved: boolean }
-  server.post("/approvals/:id", async (request, reply) => {
+  // POST /approvals/:id and POST /approvals/:id/decision -> { approved: boolean }
+  const handleDecision = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     const parseResult = ApprovalDecisionRequest.safeParse(request.body);
     if (!parseResult.success) {
@@ -90,5 +90,8 @@ export async function approvalRoutes(server: FastifyInstance) {
       status: updated.status,
       decidedAt: updated.decidedAt ? updated.decidedAt.toISOString() : null,
     });
-  });
+  };
+
+  server.post("/approvals/:id", handleDecision);
+  server.post("/approvals/:id/decision", handleDecision);
 }

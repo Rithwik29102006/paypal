@@ -6,10 +6,13 @@ import { receiptRoutes } from "./routes/receipts.js";
 import { checkRoutes } from "./routes/check.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { eventRoutes } from "./routes/events.js";
+import { payRoutes } from "./routes/pay.js";
 import { callDetector, type DetectorClient } from "./detector.js";
+import { getPayPalClient, type PayPalClient } from "./paypal/client.js";
 
 export interface ServerOptions {
   detector?: DetectorClient;
+  paypalClient?: PayPalClient;
 }
 
 export async function buildServer(
@@ -45,7 +48,9 @@ export async function buildServer(
   });
 
   // Domain routes
-  await server.register(mandateRoutes);
+  const ppClient = options.paypalClient ?? getPayPalClient();
+  await mandateRoutes(server, ppClient);
+  await payRoutes(server, ppClient);
   await server.register(receiptRoutes);
   await server.register(eventRoutes);
   await server.register(approvalRoutes);

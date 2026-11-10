@@ -49,6 +49,7 @@ export async function checkRoutes(
         createdAt: mandate.createdAt.toISOString(),
         signature: mandate.signature,
         publicKey: mandate.publicKey,
+        vaultId: mandate.vaultId,
       });
     } catch {
       signatureValid = false;

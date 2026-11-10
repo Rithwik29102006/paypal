@@ -15,5 +15,7 @@ dev.db
 *.pem
 *.key
 apps/api/.keys/
+apps/api/.evidence/
+.evidence
 node_modules
 dist

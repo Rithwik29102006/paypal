@@ -58,16 +58,25 @@ export function getPublicKeyPem(): string {
 }
 
 /**
- * Signs the canonical representation of { rules, mandateId, createdAt }
+ * Signs the canonical representation of { rules, mandateId, createdAt, vaultId? }
  * with the active Ed25519 private key.
  */
 export function signMandate(
   rules: Rules,
   mandateId: string,
-  createdAt: string
+  createdAt: string,
+  vaultId?: string | null
 ): string {
   const { privateKey } = getSigningKeyPair();
-  const canonical = canonicalJson({ rules, mandateId, createdAt });
+  const payload: Record<string, unknown> = {
+    rules,
+    mandateId,
+    createdAt,
+  };
+  if (vaultId) {
+    payload.vaultId = vaultId;
+  }
+  const canonical = canonicalJson(payload);
   const sigBuffer = crypto.sign(
     null,
     Buffer.from(canonical, "utf8"),
@@ -85,13 +94,18 @@ export function verifyMandate(mandate: {
   createdAt: string;
   signature: string;
   publicKey: string;
+  vaultId?: string | null;
 }): boolean {
   try {
-    const canonical = canonicalJson({
+    const payload: Record<string, unknown> = {
       rules: mandate.rules,
       mandateId: mandate.id,
       createdAt: mandate.createdAt,
-    });
+    };
+    if (mandate.vaultId) {
+      payload.vaultId = mandate.vaultId;
+    }
+    const canonical = canonicalJson(payload);
     const keyObject = crypto.createPublicKey(mandate.publicKey);
     return crypto.verify(
       null,
