@@ -227,3 +227,60 @@ export const LiveEventV2 = z.object({
   payload: z.record(z.string(), z.unknown()).optional(),
 });
 export type LiveEventV2 = z.infer<typeof LiveEventV2>;
+
+// ---------- Disputes (Phase 5, additive) ----------
+
+export const DisputeStatus = z.enum(["open", "evidence_submitted", "won", "lost", "error"]);
+export type DisputeStatus = z.infer<typeof DisputeStatus>;
+
+/** What the dashboard's "View evidence" drawer shows. */
+export const DisputeEvidence = z.object({
+  disputeId: z.string(),
+  generatedAt: z.string(),
+  mandate: z.object({
+    id: z.string(),
+    userId: z.string(),
+    rules: Rules,
+    signature: z.string(),
+    publicKey: z.string(),
+    signatureValid: z.boolean(),
+    createdAt: z.string(),
+  }),
+  cart: z.object({
+    id: z.string(),
+    decision: Decision,
+    reasons: z.array(z.string()),
+    riskScore: z.number(),
+    total: z.number(),
+    items: z.array(z.record(z.string(), z.unknown())),
+    userRequest: z.string().optional(),
+  }),
+  approval: z.object({ id: z.string(), status: z.string(), decidedAt: z.string().nullable() }).nullable(),
+  payment: z.object({
+    id: z.string(),
+    paypalOrderId: z.string(),
+    captureId: z.string().nullable(),
+    amount: z.number(),
+    status: z.string(),
+  }),
+  receipts: z.array(Receipt),
+  chain: z.object({ ok: z.boolean(), brokenSeq: z.number().int().nullable().optional(), checked: z.number().int() }),
+  summary: z.string(),
+});
+export type DisputeEvidence = z.infer<typeof DisputeEvidence>;
+
+export const DisputeView = z.object({
+  id: z.string(),
+  paypalDisputeId: z.string(),
+  paymentId: z.string().nullable(),
+  cartId: z.string().nullable(),
+  captureId: z.string().nullable(),
+  reason: z.string().nullable(),
+  amount: z.number().nullable(),
+  status: DisputeStatus,
+  submittedAt: z.string().nullable(),
+  createdAt: z.string(),
+  lastError: z.string().nullable().optional(),
+  evidence: DisputeEvidence.nullable(),
+});
+export type DisputeView = z.infer<typeof DisputeView>;

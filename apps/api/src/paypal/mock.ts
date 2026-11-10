@@ -21,6 +21,8 @@ export class MockPayPal implements PayPalClient {
     verifyWebhook: 0,
     getDispute: 0,
     provideEvidence: 0,
+    requireEvidence: 0,
+    adjudicate: 0,
   };
 
   public failures: {
@@ -31,6 +33,8 @@ export class MockPayPal implements PayPalClient {
     verifyWebhook?: Error;
     getDispute?: Error;
     provideEvidence?: Error;
+    requireEvidence?: Error;
+    adjudicate?: Error;
   } = {};
 
   public evidences = new Map<string, ProvideEvidenceInput>();
@@ -46,6 +50,8 @@ export class MockPayPal implements PayPalClient {
       verifyWebhook: 0,
       getDispute: 0,
       provideEvidence: 0,
+      requireEvidence: 0,
+      adjudicate: 0,
     };
     this.failures = {};
     this.evidences.clear();
@@ -171,6 +177,28 @@ export class MockPayPal implements PayPalClient {
     }
     this.evidences.set(disputeId, input);
     return { status: "SUCCESS" };
+  }
+
+  async requireEvidence(disputeId: string, _requestId: string): Promise<void> {
+    this.callCounts.requireEvidence++;
+    if (this.failures.requireEvidence) throw this.failures.requireEvidence;
+    const d = await this.getDispute(disputeId);
+    this.disputes.set(disputeId, { ...d, status: "WAITING_FOR_SELLER_RESPONSE" });
+  }
+
+  async adjudicate(
+    disputeId: string,
+    outcome: "SELLER_FAVOR" | "BUYER_FAVOR",
+    _requestId: string
+  ): Promise<void> {
+    this.callCounts.adjudicate++;
+    if (this.failures.adjudicate) throw this.failures.adjudicate;
+    const d = await this.getDispute(disputeId);
+    this.disputes.set(disputeId, {
+      ...d,
+      status: "RESOLVED",
+      raw: { dispute_outcome: { outcome_code: outcome === "SELLER_FAVOR" ? "RESOLVED_SELLER_FAVOUR" : "RESOLVED_BUYER_FAVOUR" } },
+    });
   }
 }
 

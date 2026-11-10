@@ -88,6 +88,7 @@ model Dispute {
   amountCents  Int?
   currency     String    @default("USD")
   evidenceJson String?
+  lastError    String?
   submittedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

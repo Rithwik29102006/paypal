@@ -209,10 +209,12 @@ export class SandboxPayPal implements PayPalClient {
   ): Promise<T> {
     const { accessToken: token } = await this.getAccessToken();
 
+    const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
     };
+    // For multipart bodies fetch sets Content-Type (with the boundary) itself.
+    if (!isForm) headers["Content-Type"] = "application/json";
 
     if (method === "POST") {
       headers["PayPal-Request-Id"] = requestId;
@@ -225,7 +227,7 @@ export class SandboxPayPal implements PayPalClient {
       const res = await this.fetchFn(`${this.baseUrl}${path}`, {
         method,
         headers,
-        body: body ? JSON.stringify(body) : undefined,
+        body: isForm ? (body as FormData) : body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
 
@@ -527,22 +529,67 @@ export class SandboxPayPal implements PayPalClient {
     input: ProvideEvidenceInput,
     requestId: string
   ): Promise<{ status: string }> {
-    // Official PayPal Disputes v1 provide-evidence endpoint
-    // VERIFY: POST /v1/customer/disputes/{id}/provide-evidence request payload structure
-    const body = {
-      note: input.notes,
-      evidence_type: input.evidenceType || "PROOF_OF_FULFILLMENT",
-    };
+    // Provide evidence accepts ONLY multipart/form-data: a JSON part named
+    // "input" ({ evidences: [...] }) plus optional files in "evidence-file".
+    // Source: developer.paypal.com/platforms/disputes/integrate-disputes and
+    // the provide-evidence API reference. Sandbox test data asks for
+    // evidence_type OTHER with notes (developer.paypal.com/disputes/test-go-live).
+    const form = new FormData();
+    form.append(
+      "input",
+      JSON.stringify({
+        evidences: [
+          {
+            evidence_type: input.evidenceType || "OTHER",
+            notes: input.notes.slice(0, 2000),
+          },
+        ],
+      })
+    );
+    if (input.fileBuffer) {
+      form.append(
+        "evidence-file",
+        new Blob([new Uint8Array(input.fileBuffer)], { type: "application/pdf" }),
+        input.fileName || "mandate-evidence.pdf"
+      );
+    }
 
-    const data = await this.request<unknown>(
-      `/v1/customer/disputes/${disputeId}/provide-evidence`,
+    await this.request<unknown>(
+      `/v1/customer/disputes/${encodeURIComponent(disputeId)}/provide-evidence`,
       "POST",
-      body,
+      form,
       requestId
     );
+    return { status: "SUCCESS" };
+  }
 
-    return {
-      status: "SUCCESS",
-    };
+  /**
+   * SANDBOX ONLY. Moves a dispute from UNDER_REVIEW to WAITING_FOR_SELLER_RESPONSE
+   * so the seller can provide evidence. Body: { action: "SELLER_EVIDENCE" }.
+   */
+  async requireEvidence(disputeId: string, requestId: string): Promise<void> {
+    await this.request<unknown>(
+      `/v1/customer/disputes/${encodeURIComponent(disputeId)}/require-evidence`,
+      "POST",
+      { action: "SELLER_EVIDENCE" },
+      requestId
+    );
+  }
+
+  /**
+   * SANDBOX ONLY. Settles a dispute. The dispute must be UNDER_REVIEW and the
+   * response must offer the adjudicate link. Body: { adjudication_outcome }.
+   */
+  async adjudicate(
+    disputeId: string,
+    outcome: "SELLER_FAVOR" | "BUYER_FAVOR",
+    requestId: string
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/v1/customer/disputes/${encodeURIComponent(disputeId)}/adjudicate`,
+      "POST",
+      { adjudication_outcome: outcome },
+      requestId
+    );
   }
 }

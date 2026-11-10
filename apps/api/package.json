@@ -11,7 +11,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "db:migrate": "prisma migrate dev",
     "seed": "tsx src/seed.ts",
-    "tamper": "tsx src/tamper.ts"
+    "tamper": "tsx src/tamper.ts",
+    "replay:dispute": "tsx scripts/replay-dispute.ts",
+    "import:dispute": "tsx scripts/import-dispute.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

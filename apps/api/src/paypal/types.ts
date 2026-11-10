@@ -69,4 +69,12 @@ export interface PayPalClient {
     input: ProvideEvidenceInput,
     requestId: string
   ): Promise<{ status: string }>;
+  /** SANDBOX ONLY: move a dispute to WAITING_FOR_SELLER_RESPONSE. */
+  requireEvidence(disputeId: string, requestId: string): Promise<void>;
+  /** SANDBOX ONLY: settle a dispute in the seller's or buyer's favor. */
+  adjudicate(
+    disputeId: string,
+    outcome: "SELLER_FAVOR" | "BUYER_FAVOR",
+    requestId: string
+  ): Promise<void>;
 }
