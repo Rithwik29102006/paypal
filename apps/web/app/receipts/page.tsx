@@ -58,19 +58,19 @@ export default function ReceiptsPage() {
           <button
             onClick={() => tamperReceipt(2)}
             className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
-            title="Demonstration: Mutate record #2 payload to show verify chain catching tampering"
+            title="Tampering is done server-side: run `pnpm tamper -- 2` in a terminal, then click Verify"
           >
             <AlertTriangle className="w-3.5 h-3.5" />
-            Simulate Tamper (#2)
+            How to tamper (#2)
           </button>
 
           <button
             onClick={restoreReceipts}
             className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
-            title="Restore original verified chain"
+            title="Reload the receipt chain from the Mandate API (run `pnpm seed` to repair a tampered demo chain)"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Restore Chain
+            Reload
           </button>
 
           <button
