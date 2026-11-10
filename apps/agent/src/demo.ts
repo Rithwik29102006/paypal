@@ -14,9 +14,10 @@ const client = config.mockApi ? new MockMandateClient("approve") : defaultClient
 const line = () => console.log("-".repeat(64));
 
 function show(o: PaymentOutcome) {
-  const label = { paid: "PAID", blocked: "BLOCKED", rejected_by_user: "REJECTED BY ANITA", approval_timeout: "NO ANSWER", refused_locally: "REFUSED", error: "ERROR" }[o.status];
+  const label = { paid: "PAID", awaiting_buyer_approval: "WAITING FOR PAYPAL APPROVAL", blocked: "BLOCKED", rejected_by_user: "REJECTED BY ANITA", approval_timeout: "NO ANSWER", refused_locally: "REFUSED", error: "ERROR" }[o.status];
   console.log(`\n  => ${label}${o.total !== undefined ? `  ($${o.total.toFixed(2)})` : ""}${o.riskScore !== undefined ? `  risk ${o.riskScore}` : ""}`);
   if (o.paypalOrderId) console.log(`     PayPal order ${o.paypalOrderId}`);
+  if (o.approveUrl) console.log(`     Approve in PayPal: ${o.approveUrl}`);
   for (const r of o.reasons ?? []) console.log(`     - ${r}`);
   if (o.status === "error") console.log(`     ${o.message}`);
 }
