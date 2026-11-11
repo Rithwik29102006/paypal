@@ -2,31 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 241, 245, 249;
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { overflow-x: hidden; }
+  body {
+    @apply bg-mist text-ink font-body antialiased;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  h1, h2, h3 { @apply font-display text-ink; letter-spacing: -0.02em; }
+  :focus-visible { outline: 2px solid #0070E0; outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: #BFEAFF; }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: #f8fafc;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  min-height: 100vh;
+@layer components {
+  /* Primary action: PayPal's own pill button shape. */
+  .btn-pp { @apply inline-flex items-center justify-center gap-2 rounded-full bg-pp px-5 py-2.5 font-semibold text-white transition-colors hover:bg-pp-600 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-white px-5 py-2.5 font-semibold text-ink transition-colors hover:border-pp hover:text-pp disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-quiet { @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-ink-600 transition-colors hover:bg-white hover:text-pp; }
+
+  /* The signed-rules ticket: notched sides on the perforated tear line. */
+  .slip { @apply relative bg-white; border-radius: 18px; }
+  .tear { position: relative; border-top: 2px dashed #D8E1EF; margin: 0 18px; }
+  .tear::before, .tear::after {
+    content: ""; position: absolute; top: -1px; width: 22px; height: 22px; border-radius: 9999px;
+    background: #EEF3FB; transform: translateY(-50%);
+  }
+  .tear::before { left: -29px; }
+  .tear::after { right: -29px; }
 }
 
-/* Custom subtle scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

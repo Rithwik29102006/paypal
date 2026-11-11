@@ -10,6 +10,7 @@
  */
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { Seal } from "@/components/Seal";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { completeVault, payCart } from "@/lib/api";
@@ -22,7 +23,7 @@ function ReturnInner() {
   const { setMandateId, refresh, clearPaypalApproval } = useMandate();
   const [state, setState] = useState<{ status: "working" | "done" | "error"; message: string; title?: string }>({
     status: "working",
-    message: cartId ? "Capturing your approved PayPal payment..." : "Saving your PayPal account for this mandate...",
+    message: cartId ? "Confirming your payment with PayPal…" : "Saving your PayPal account…",
   });
 
   useEffect(() => {
@@ -34,8 +35,8 @@ function ReturnInner() {
           clearPaypalApproval();
           setState(
             p.status === "captured"
-              ? { status: "done", title: "Payment captured", message: `PayPal order ${p.paypalOrderId} captured (capture ${p.captureId}). It is now in the receipt chain.` }
-              : { status: "error", message: `PayPal order ${p.paypalOrderId} is ${p.status}. Approve it in PayPal first.` }
+              ? { status: "done", title: "Paid with PayPal", message: "The payment went through and a sealed receipt was added to Activity." }
+              : { status: "error", message: "PayPal hasn't confirmed this order yet. Approve it in PayPal, then come back." }
           );
           refresh();
         })
@@ -45,12 +46,12 @@ function ReturnInner() {
         .then((m) => {
           if (cancelled) return;
           setMandateId(m.id);
-          setState({ status: "done", title: "PayPal connected", message: `PayPal saved. Mandate ${m.id} can now pay without asking you each time (within its rules).` });
+          setState({ status: "done", title: "PayPal account saved", message: "The agent can now pay within Anita's rules without a PayPal pop-up every time." });
           refresh();
         })
         .catch((err: Error) => !cancelled && setState({ status: "error", message: err.message }));
     } else {
-      setState({ status: "error", message: "Missing mandateId or cartId in the return URL." });
+      setState({ status: "error", message: "This page is reached from PayPal after approving an order. Start from the agent instead." });
     }
     return () => {
       cancelled = true;
@@ -58,19 +59,19 @@ function ReturnInner() {
   }, [mandateId, cartId, setMandateId, refresh, clearPaypalApproval]);
 
   return (
-    <div className="max-w-xl mx-auto mt-10 bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-4 text-sm">
-      <div className="flex items-center gap-2">
-        {state.status === "working" && <Loader2 className="w-5 h-5 animate-spin text-brand-600" />}
-        {state.status === "done" && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-        {state.status === "error" && <AlertTriangle className="w-5 h-5 text-rose-600" />}
-        <h1 className="font-bold text-slate-900 text-lg">
-          {state.status === "done" ? state.title : state.status === "error" ? "Could not finish with PayPal" : "Talking to PayPal"}
-        </h1>
+    <div className="mx-auto mt-6 max-w-[560px] rounded-[26px] bg-white p-8 text-center sm:p-10">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center">
+        {state.status === "working" && <Loader2 className="h-10 w-10 animate-spin text-pp" />}
+        {state.status === "done" && <Seal size={64} className="animate-stamp" />}
+        {state.status === "error" && <AlertTriangle className="h-10 w-10 text-stop" />}
       </div>
-      <p className="text-slate-600">{state.message}</p>
-      <div className="flex gap-2 pt-2">
-        <Link href="/" className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">Go to dashboard</Link>
-        <Link href="/mandate" className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold">View mandate</Link>
+      <h1 className="mt-5 text-[2rem] font-extrabold leading-tight">
+        {state.status === "done" ? state.title : state.status === "error" ? "PayPal didn't finish" : "Talking to PayPal"}
+      </h1>
+      <p className="mx-auto mt-3 max-w-[42ch] text-[1.05rem] text-ink-600">{state.message}</p>
+      <div className="mt-7 flex justify-center gap-2">
+        <Link href="/" className="btn-pp">Back to the agent</Link>
+        <Link href="/receipts" className="btn-ghost">See activity</Link>
       </div>
     </div>
   );

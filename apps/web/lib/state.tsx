@@ -40,6 +40,23 @@ export interface PendingApproval {
 
 export type DisputeItem = DisputeView;
 
+/** How one agent request ended, worked out from the live events seen while it ran. */
+export type RunOutcome = "paid" | "awaiting_paypal" | "needs_approval" | "blocked" | "error" | "info";
+
+export interface AgentRun {
+  request: string;
+  response: string;
+  timestamp: string;
+  steps: string[];
+  outcome: RunOutcome;
+  /** Cart total from Mandate's check, when there was one. */
+  total?: number;
+  /** Why Mandate stopped or held the cart, in its own words. */
+  reasons?: string[];
+  /** Cart id from Mandate's check, to find its receipt (and the detector's findings). */
+  cartId?: string;
+}
+
 interface MandateContextType {
   mandate: MandateData;
   mandateLoaded: boolean;
@@ -59,7 +76,9 @@ interface MandateContextType {
   addEvent: (e: LiveEvent) => void;
   agentRunning: boolean;
   runAgentRequest: (request: string) => Promise<{ text: string; events: LiveEvent[] }>;
-  agentHistory: Array<{ request: string; response: string; timestamp: string }>;
+  agentHistory: AgentRun[];
+  /** Steps the agent has reported so far in the run that is in progress. */
+  liveSteps: string[];
   backendConnected: boolean;
   apiConnected: boolean;
   agentConnected: boolean;
@@ -68,6 +87,9 @@ interface MandateContextType {
   /** Set when a purchase needs the buyer to approve the PayPal order (no saved PayPal account). */
   paypalApproval: { url: string; summary: string } | null;
   clearPaypalApproval: () => void;
+  clearError: () => void;
+  /** Emergency stop for all agent spending (and the way back). */
+  setPaused: (paused: boolean) => Promise<void>;
   refresh: () => Promise<void>;
   setMandateId: (id: string) => void;
 }
@@ -127,7 +149,10 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [agentRunning, setAgentRunning] = useState(false);
-  const [agentHistory, setAgentHistory] = useState<Array<{ request: string; response: string; timestamp: string }>>([]);
+  const [agentHistory, setAgentHistory] = useState<AgentRun[]>([]);
+  const [liveSteps, setLiveSteps] = useState<string[]>([]);
+  // What Mandate/PayPal said while the current run was in flight (filled from the SSE stream).
+  const runRef = useRef<{ active: boolean; decision?: string; paid?: boolean; total?: number; reasons?: string[]; cartId?: string }>({ active: false });
   const [apiConnected, setApiConnected] = useState(false);
   const [agentConnected, setAgentConnected] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -201,6 +226,15 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
       (e: LiveEventV2) => {
         if (e.mandateId && e.mandateId !== mandateIdRef.current) return;
         addEvent({ type: e.type === "mandate" ? "agent" : e.type, cartId: e.cartId, decision: e.decision, summary: e.summary, at: e.at });
+        if (runRef.current.active) {
+          if (e.type === "check" && e.decision) {
+            runRef.current.decision = e.decision;
+            if (typeof e.total === "number") runRef.current.total = e.total;
+            if (e.reasons?.length) runRef.current.reasons = e.reasons;
+            if (e.cartId) runRef.current.cartId = e.cartId;
+          }
+          if (e.type === "payment" && /captured/i.test(e.summary)) runRef.current.paid = true;
+        }
 
         if (e.type === "check" && e.decision === "needs_approval" && e.approvalId) {
           const approval: PendingApproval = {
@@ -237,6 +271,16 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
     addEvent({ type: "agent", summary: `New mandate ${created.id} signed (Ed25519); previous mandate revoked`, at: new Date().toISOString() });
     // Save the PayPal payment method once (vault). Mock mode points straight back to /paypal/return.
     if (approveUrl) window.location.href = approveUrl;
+  };
+
+  const setPaused = async (paused: boolean) => {
+    try {
+      await api.setMandatePaused(mandateIdRef.current, paused);
+      setMandate((m) => ({ ...m, status: paused ? "paused" : "active" }));
+    } catch (err) {
+      setLastError((err as Error).message);
+    }
+    refresh();
   };
 
   const resolveApproval = async (id: string, approved: boolean) => {
@@ -298,27 +342,63 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
 
   const runAgentRequest = async (request: string) => {
     const collected: LiveEvent[] = [];
+    let approveSeen = false;
+    runRef.current = { active: true };
+    setLiveSteps([]);
     setAgentRunning(true);
+    const finish = (text: string, failed: boolean): AgentRun => {
+      const r = runRef.current;
+      const outcome: RunOutcome = failed
+        ? "error"
+        : r.paid
+          ? "paid"
+          : approveSeen
+            ? "awaiting_paypal"
+            : r.decision === "needs_approval"
+              ? "needs_approval"
+              : r.decision === "block"
+                ? "blocked"
+                : "info";
+      return {
+        request,
+        response: text,
+        timestamp: new Date().toISOString(),
+        steps: collected.map((e) => e.summary),
+        outcome,
+        total: r.total,
+        reasons: r.reasons,
+        cartId: r.cartId,
+      };
+    };
     try {
-      if (!agentConnected) throw new Error(`Agent server is offline (${api.AGENT_URL}). Start it with: pnpm agent:server`);
+      if (!agentConnected) throw new Error("The shopping agent is offline. Start it with: pnpm agent:server");
       const text = await api.runAgent(request, mandateId, (ev) => {
         // check/approval/payment events also arrive from the API stream; show only the agent's own steps here.
-        if (ev.approveUrl) setPaypalApproval({ url: ev.approveUrl, summary: ev.summary ?? "Approve the PayPal order" });
+        if (ev.approveUrl) {
+          approveSeen = true;
+          setPaypalApproval({ url: ev.approveUrl, summary: ev.summary ?? "Approve the PayPal order" });
+        }
         if (ev.type === "agent" && ev.summary) {
           const e: LiveEvent = { type: "agent", summary: ev.summary, at: ev.at ?? new Date().toISOString() };
           collected.push(e);
+          setLiveSteps((prev) => [...prev, ev.summary as string]);
           addEvent(e);
         }
       });
-      setAgentHistory((prev) => [{ request, response: text, timestamp: new Date().toISOString() }, ...prev]);
+      // Give the API's SSE events for this cart a moment to land before classifying the run.
+      await new Promise((r) => setTimeout(r, 400));
+      const run = finish(text, false);
+      setAgentHistory((prev) => [run, ...prev]);
       return { text, events: collected };
     } catch (err) {
       const text = (err as Error).message;
       setLastError(text);
-      setAgentHistory((prev) => [{ request, response: text, timestamp: new Date().toISOString() }, ...prev]);
+      setAgentHistory((prev) => [finish(text, true), ...prev]);
       return { text, events: collected };
     } finally {
+      runRef.current.active = false;
       setAgentRunning(false);
+      setLiveSteps([]);
       refresh();
     }
   };
@@ -345,6 +425,7 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
         agentRunning,
         runAgentRequest,
         agentHistory,
+        liveSteps,
         backendConnected: apiConnected && agentConnected,
         apiConnected,
         agentConnected,
@@ -352,6 +433,8 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
         lastError,
         paypalApproval,
         clearPaypalApproval: () => setPaypalApproval(null),
+        clearError: () => setLastError(null),
+        setPaused,
         refresh,
         setMandateId,
       }}

@@ -1,36 +1,25 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Bricolage_Grotesque, Onest } from "next/font/google";
 import "./globals.css";
 import { MandateProvider } from "@/lib/state";
-import { Sidebar } from "@/components/Sidebar";
-import { Header } from "@/components/Header";
+import { TopBar } from "@/components/TopBar";
 
-const inter = Inter({ subsets: ["latin"] });
+const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display", display: "swap" });
+const body = Onest({ subsets: ["latin"], variable: "--font-body", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Mandate — Permission Slip for AI Agents that Spend Money",
+  title: "Mandate: a permission slip for AI agents that spend money",
   description:
-    "AI agents shop for you; Mandate checks every purchase against signed rules before PayPal captures payment, leaving tamper-proof receipts.",
+    "An AI agent shops for you; Mandate checks every purchase against your signed rules before PayPal moves any money.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={`${display.variable} ${body.variable}`}>
+      <body>
         <MandateProvider>
-          <div className="flex min-h-screen bg-slate-50">
-            <Sidebar />
-            <div className="flex-1 flex flex-col min-w-0">
-              <Header />
-              <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto">
-                {children}
-              </main>
-            </div>
-          </div>
+          <TopBar />
+          <main className="mx-auto w-full max-w-[1180px] px-5 py-8 sm:px-8 sm:py-10">{children}</main>
         </MandateProvider>
       </body>
     </html>

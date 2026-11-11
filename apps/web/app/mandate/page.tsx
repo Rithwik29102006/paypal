@@ -1,337 +1,195 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useMandate } from "@/lib/state";
-import { formatCurrency } from "@/lib/utils";
 import type { Category, Rules } from "@mandate/shared";
-import {
-  FileKey,
-  ShieldCheck,
-  CheckCircle2,
-  Lock,
-  Plus,
-  X,
-  CreditCard,
-  KeyRound,
-  ArrowRight,
-  Info,
-  Calendar,
-} from "lucide-react";
+import { CATEGORY_LABEL } from "@/lib/describe";
+import { Seal } from "@/components/Seal";
+import { cn } from "@/lib/utils";
+import { Plus, X } from "lucide-react";
 
-const ALL_CATEGORIES: Category[] = [
-  "groceries",
-  "school",
-  "household",
-  "electronics",
-  "gift_cards",
-  "crypto",
-  "luxury",
-];
+const ALL_CATEGORIES: Category[] = ["groceries", "school", "household", "electronics", "gift_cards", "crypto", "luxury"];
 
-export default function MandateRulesPage() {
-  const { mandate, updateRules } = useMandate();
-
-  const [monthlyCap, setMonthlyCap] = useState(mandate.rules.monthlyCap);
-  const [perTxCap, setPerTxCap] = useState(mandate.rules.perTxCap);
-  const [approvalAbove, setApprovalAbove] = useState(mandate.rules.approvalAbove);
-  const [allowedCategories, setAllowedCategories] = useState<Category[]>(
-    mandate.rules.allowedCategories
+/** A dollar amount typed straight into the sentence. */
+function Amount({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  return (
+    <span className="mx-1 inline-flex items-baseline border-b-2 border-pp px-1 text-pp">
+      <span aria-hidden="true">$</span>
+      <input
+        aria-label={label}
+        inputMode="numeric"
+        value={Number.isFinite(value) ? String(value) : ""}
+        onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "")) || 0)}
+        className="bg-transparent font-bold text-pp focus:outline-none"
+        style={{ width: `${Math.max(1, String(value).length) * 0.62 + 0.15}em` }}
+      />
+    </span>
   );
-  const [blockedKeywords, setBlockedKeywords] = useState<string[]>(
-    mandate.rules.blockedKeywords
-  );
-  const [newKeyword, setNewKeyword] = useState("");
-  const [expiresAt, setExpiresAt] = useState(
-    mandate.rules.expiresAt.split("T")[0]
-  );
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [signingModal, setSigningModal] = useState(false);
+}
 
-  const toggleCategory = (cat: Category) => {
-    if (allowedCategories.includes(cat)) {
-      if (allowedCategories.length > 1) {
-        setAllowedCategories(allowedCategories.filter((c) => c !== cat));
-      }
-    } else {
-      setAllowedCategories([...allowedCategories, cat]);
+export default function RulesPage() {
+  const { mandate, mandateLoaded, updateRules } = useMandate();
+  const r = mandate.rules;
+
+  const [monthlyCap, setMonthlyCap] = useState(r.monthlyCap);
+  const [perTxCap, setPerTxCap] = useState(r.perTxCap);
+  const [approvalAbove, setApprovalAbove] = useState(r.approvalAbove);
+  const [cats, setCats] = useState<Category[]>(r.allowedCategories);
+  const [words, setWords] = useState<string[]>(r.blockedKeywords);
+  const [newWord, setNewWord] = useState("");
+  const [expiresAt, setExpiresAt] = useState(r.expiresAt.split("T")[0]);
+  const [state, setState] = useState<"idle" | "signing" | "saved" | "error">("idle");
+  const [error, setError] = useState("");
+
+  // The mandate arrives after the first render; show the real rules once it does.
+  useEffect(() => {
+    setMonthlyCap(r.monthlyCap);
+    setPerTxCap(r.perTxCap);
+    setApprovalAbove(r.approvalAbove);
+    setCats(r.allowedCategories);
+    setWords(r.blockedKeywords);
+    setExpiresAt(r.expiresAt.split("T")[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mandate.id, mandateLoaded]);
+
+  const toggle = (c: Category) =>
+    setCats((prev) => (prev.includes(c) ? (prev.length > 1 ? prev.filter((x) => x !== c) : prev) : [...prev, c]));
+
+  const addWord = () => {
+    const w = newWord.trim().toLowerCase();
+    if (w && !words.includes(w)) setWords([...words, w]);
+    setNewWord("");
+  };
+
+  const problems: string[] = [];
+  if (perTxCap > monthlyCap) problems.push("A single purchase can't be bigger than the monthly limit.");
+  if (approvalAbove > perTxCap) problems.push("The ask-me amount should be at or below the single-purchase limit.");
+  if (monthlyCap <= 0 || perTxCap <= 0) problems.push("Limits need to be more than $0.");
+
+  const save = async () => {
+    if (problems.length) return;
+    setState("signing");
+    setError("");
+    const rules: Rules = {
+      currency: "USD",
+      monthlyCap: Number(monthlyCap),
+      perTxCap: Number(perTxCap),
+      approvalAbove: Number(approvalAbove),
+      allowedCategories: cats,
+      allowedMerchants: r.allowedMerchants?.length ? r.allowedMerchants : ["demo-store"],
+      blockedKeywords: words,
+      expiresAt: new Date(expiresAt).toISOString(),
+    };
+    try {
+      await updateRules(rules); // may send Anita to PayPal to save her account
+      setState("saved");
+      setTimeout(() => setState("idle"), 4000);
+    } catch (e) {
+      setError((e as Error).message);
+      setState("error");
     }
   };
-
-  const addKeyword = () => {
-    if (newKeyword.trim() && !blockedKeywords.includes(newKeyword.trim().toLowerCase())) {
-      setBlockedKeywords([...blockedKeywords, newKeyword.trim().toLowerCase()]);
-      setNewKeyword("");
-    }
-  };
-
-  const removeKeyword = (kw: string) => {
-    setBlockedKeywords(blockedKeywords.filter((k) => k !== kw));
-  };
-
-  const handleSave = () => {
-    setSigningModal(true);
-    setTimeout(() => {
-      const newRules: Rules = {
-        currency: "USD",
-        monthlyCap: Number(monthlyCap),
-        perTxCap: Number(perTxCap),
-        approvalAbove: Number(approvalAbove),
-        allowedCategories,
-        allowedMerchants: ["demo-store"],
-        blockedKeywords,
-        expiresAt: new Date(expiresAt).toISOString(),
-      };
-      updateRules(newRules);
-      setSigningModal(false);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 4000);
-    }, 1200);
-  };
-
-  // Plain-language preview as required by the build guide
-  const naturalLanguagePreview = `Your agent can spend up to $${monthlyCap} a month on ${allowedCategories
-    .map((c) => c.replace("_", " "))
-    .join(" and ")}, and will ask you above $${approvalAbove}.`;
 
   return (
-    <div className="max-w-4xl space-y-8">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center font-bold">
-            <FileKey className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Mandate Spending Rules
-            </h1>
-            <p className="text-xs text-slate-500">
-              Set spending limits and authorized categories. Rules are signed with Ed25519 and enforced on every transaction.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="max-w-[860px]">
+      <h1 className="text-[2.4rem] font-extrabold leading-tight">Anita&apos;s rules</h1>
+      <p className="mt-2 max-w-[62ch] text-[1.08rem] text-ink-600">
+        Edit the sentence, then sign it. Mandate checks every cart the agent builds against exactly these words.
+      </p>
 
-      {/* Plain-Language Live Preview Callout */}
-      <div className="bg-gradient-to-r from-brand-600 to-sky-700 text-white rounded-2xl p-6 shadow-lg shadow-brand-600/20">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-200 mb-2">
-          <Info className="w-4 h-4 text-sky-300" />
-          Live Mandate Plain-Language Preview
-        </div>
-        <p className="text-lg sm:text-xl font-medium leading-relaxed font-sans">
-          "{naturalLanguagePreview}"
+      <section aria-label="Spending rules" className="mt-8 rounded-[26px] bg-white p-7 sm:p-10">
+        <p className="font-display text-[1.65rem] font-semibold leading-[1.6] tracking-[-0.015em] text-ink sm:text-[1.9rem]">
+          My agent may spend up to
+          <Amount label="Monthly limit in dollars" value={monthlyCap} onChange={setMonthlyCap} />a month, never more than
+          <Amount label="Single purchase limit in dollars" value={perTxCap} onChange={setPerTxCap} />
+          at once, and must ask me before anything over
+          <Amount label="Ask-me amount in dollars" value={approvalAbove} onChange={setApprovalAbove} />.
         </p>
-        <div className="mt-4 pt-3 border-t border-white/20 flex flex-wrap items-center justify-between text-xs text-sky-100">
-          <span>Active Mandate ID: <strong className="font-mono text-white">{mandate.id}</strong></span>
-          <span>Signer: <strong className="text-white">Anita Sharma (0xEd25519)</strong></span>
-        </div>
-      </div>
 
-      {savedSuccess && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-2 text-sm font-semibold animate-in fade-in">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          Rules cryptographically signed with Ed25519 and synced to Mandate API!
-        </div>
-      )}
-
-      {/* Rules Form Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
-        {/* Row 1: Caps */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Monthly Budget Cap (USD)
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-              <input
-                type="number"
-                value={monthlyCap}
-                onChange={(e) => setMonthlyCap(Number(e.target.value))}
-                className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white"
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">Total maximum spend per calendar month</p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Per-Purchase Cap (USD)
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-              <input
-                type="number"
-                value={perTxCap}
-                onChange={(e) => setPerTxCap(Number(e.target.value))}
-                className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white"
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">Hard limit on single transaction total</p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Ask Anita Above (USD)
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
-              <input
-                type="number"
-                value={approvalAbove}
-                onChange={(e) => setApprovalAbove(Number(e.target.value))}
-                className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white"
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">Any cart exceeding this triggers human review</p>
-          </div>
-        </div>
-
-        {/* Row 2: Allowed Categories Chips */}
-        <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-            Authorized Purchase Categories
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {ALL_CATEGORIES.map((cat) => {
-              const isAllowed = allowedCategories.includes(cat);
-              const isHighRisk = ["gift_cards", "crypto", "luxury"].includes(cat);
-
+        <div className="mt-8">
+          <p className="font-display text-[1.25rem] font-semibold">It may only buy</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {ALL_CATEGORIES.map((c) => {
+              const on = cats.includes(c);
               return (
                 <button
-                  key={cat}
-                  type="button"
-                  onClick={() => toggleCategory(cat)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-                    isAllowed
-                      ? "bg-brand-50 border-brand-300 text-brand-700 shadow-sm"
-                      : "bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isAllowed ? "bg-brand-500" : "bg-slate-300"
-                    }`}
-                  />
-                  <span className="capitalize">{cat.replace("_", " ")}</span>
-                  {isHighRisk && (
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-mono">
-                      High Risk
-                    </span>
+                  key={c}
+                  onClick={() => toggle(c)}
+                  aria-pressed={on}
+                  className={cn(
+                    "rounded-full border px-4 py-2 font-medium transition-colors",
+                    on ? "border-pp bg-pp text-white" : "border-line bg-white text-ink-600 hover:border-pp hover:text-pp"
                   )}
+                >
+                  {CATEGORY_LABEL[c]}
                 </button>
               );
             })}
           </div>
-          <p className="text-[11px] text-slate-400 mt-2">
-            Any item with an unapproved category is rejected immediately by the /check rules engine.
-          </p>
         </div>
 
-        {/* Row 3: Blocked Keywords */}
-        <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-            Blocked Keywords
-          </label>
-          <div className="flex flex-wrap gap-2 items-center mb-3">
-            {blockedKeywords.map((kw) => (
-              <span
-                key={kw}
-                className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-medium flex items-center gap-1.5"
-              >
-                <span>{kw}</span>
-                <button
-                  type="button"
-                  onClick={() => removeKeyword(kw)}
-                  className="hover:text-rose-900"
-                >
-                  <X className="w-3 h-3" />
+        <div className="mt-8">
+          <p className="font-display text-[1.25rem] font-semibold">and never anything mentioning</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {words.map((w) => (
+              <span key={w} className="inline-flex items-center gap-1 rounded-full bg-stop-50 py-1.5 pl-3.5 pr-1.5 font-medium text-stop">
+                {w}
+                <button onClick={() => setWords(words.filter((x) => x !== w))} className="rounded-full p-1 hover:bg-white" aria-label={`Remove ${w}`}>
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </span>
             ))}
-          </div>
-          <div className="flex gap-2 max-w-md">
-            <input
-              type="text"
-              placeholder="e.g. bitcoin, luxury, gaming"
-              value={newKeyword}
-              onChange={(e) => setNewKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addKeyword())}
-              className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white"
-            />
-            <button
-              type="button"
-              onClick={addKeyword}
-              className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add
-            </button>
+            <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-line py-1 pl-3.5 pr-1">
+              <input
+                value={newWord}
+                onChange={(e) => setNewWord(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addWord())}
+                placeholder="add a word"
+                aria-label="Add a blocked word"
+                className="w-28 bg-transparent py-1 focus:outline-none"
+              />
+              <button onClick={addWord} className="rounded-full p-1.5 text-pp hover:bg-pp-50" aria-label="Add word">
+                <Plus className="h-4 w-4" />
+              </button>
+            </span>
           </div>
         </div>
 
-        {/* Row 4: Expiry Date */}
-        <div className="max-w-xs">
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-            Mandate Expiration Date
-          </label>
-          <div className="relative">
-            <input
-              type="date"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white"
-            />
-          </div>
-        </div>
+        <p className="mt-8 font-display text-[1.25rem] font-semibold">
+          These rules end on{" "}
+          <input
+            type="date"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+            aria-label="Rules end date"
+            className="rounded-lg border-b-2 border-pp bg-transparent px-1 font-bold text-pp focus:outline-none"
+          />
+          .
+        </p>
 
-        {/* Action Button */}
-        <div className="pt-6 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Lock className="w-4 h-4 text-slate-400" />
-            <span>Updates revoke the previous mandate and issue a fresh signed cryptographic identity.</span>
-          </div>
+        {problems.length > 0 && (
+          <ul className="mt-6 space-y-1 rounded-2xl bg-ask-50 px-4 py-3 text-ask">
+            {problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        )}
 
-          <button
-            onClick={handleSave}
-            className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-sm shadow-md shadow-brand-600/30 transition-all flex items-center gap-2"
-          >
-            <KeyRound className="w-4 h-4" />
-            Sign Rules & Connect PayPal Vault
+        <div className="mt-9 flex flex-wrap items-center gap-4 border-t border-line pt-7">
+          <button onClick={save} disabled={state === "signing" || problems.length > 0} className="btn-pp px-7 py-3 text-[1.05rem]">
+            {state === "signing" ? "Signing…" : "Sign and save rules"}
           </button>
+          <p className="max-w-[46ch] text-sm text-ink-400">
+            Signing replaces the old rules. If Anita hasn&apos;t saved a PayPal account yet, PayPal opens so she can.
+          </p>
+          {state === "saved" && (
+            <span className="ml-auto flex items-center gap-2 font-semibold text-go">
+              <Seal size={28} className="animate-stamp" /> Signed
+            </span>
+          )}
+          {state === "error" && <p className="w-full text-stop">Couldn&apos;t sign the rules: {error}</p>}
         </div>
-      </div>
-
-      {/* Signing Modal Overlay */}
-      {signingModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
-            <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-2">
-              <KeyRound className="w-6 h-6 animate-spin" />
-            </div>
-            <h3 className="text-center font-bold text-slate-900 text-lg">
-              Signing Mandate Rules
-            </h3>
-            <p className="text-center text-xs text-slate-500">
-              Generating Ed25519 signature over canonical rules JSON and binding to PayPal Vault token...
-            </p>
-            <div className="space-y-2 pt-2 text-xs font-mono">
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
-                <span className="text-slate-500">1. Canonicalize Rules:</span>
-                <span className="text-emerald-600 font-semibold">Done ✓</span>
-              </div>
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
-                <span className="text-slate-500">2. Ed25519 Private Signature:</span>
-                <span className="text-emerald-600 font-semibold">Generated ✓</span>
-              </div>
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
-                <span className="text-slate-500">3. PayPal Vault Setup Token:</span>
-                <span className="text-emerald-600 font-semibold">Bound ✓</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </section>
     </div>
   );
 }

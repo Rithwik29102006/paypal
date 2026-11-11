@@ -62,6 +62,10 @@ export const completeVault = (id: string) =>
 
 // ---------- Approvals ----------
 
+/** Emergency stop: while paused, Mandate rejects every cart. */
+export const setMandatePaused = (id: string, paused: boolean) =>
+  call<{ id: string; status: "active" | "paused" }>(API_URL, `/mandates/${encodeURIComponent(id)}/${paused ? "pause" : "resume"}`, { method: "POST" });
+
 export const decideApproval = (id: string, approved: boolean) =>
   call<{ id: string; status: string }>(API_URL, `/approvals/${encodeURIComponent(id)}`, {
     method: "POST",

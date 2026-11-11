@@ -6,6 +6,7 @@ import { prisma } from "../db.js";
 import { signMandate, getPublicKeyPem } from "../crypto/signing.js";
 import { canonicalJson } from "../crypto/canonical.js";
 import { appendReceipt } from "../receipts.js";
+import { publish } from "../events.js";
 import { getSpentThisMonthCents } from "../spend.js";
 import { getPayPalClient, type PayPalClient } from "../paypal/client.js";
 
@@ -220,4 +221,27 @@ export async function mandateRoutes(
       spentThisMonth,
     });
   });
+
+  // POST /mandates/:id/pause and /mandates/:id/resume
+  // Anita's emergency stop: while paused, /check rejects every cart ("mandate is paused"),
+  // so the agent cannot spend anything. Resuming restores the same signed rules.
+  const setStatus = (next: "active" | "paused") => async (request: { params: unknown }, reply: { status: (n: number) => { send: (b: unknown) => unknown }; send: (b: unknown) => unknown }) => {
+    const { id } = request.params as { id: string };
+    const mandate = await prisma.mandate.findUnique({ where: { id } });
+    if (!mandate) return reply.status(404).send({ error: `Mandate "${id}" not found` });
+    if (mandate.status === "revoked") return reply.status(409).send({ error: "This mandate was replaced by newer rules and cannot be resumed." });
+    if (mandate.status !== next) {
+      await prisma.mandate.update({ where: { id }, data: { status: next } });
+      await appendReceipt(id, "mandate_updated", { mandateId: id, status: next, updatedAt: new Date().toISOString() });
+      publish({
+        type: "mandate",
+        mandateId: id,
+        summary: next === "paused" ? "Spending paused: the agent cannot buy anything" : "Spending resumed under the same signed rules",
+        at: new Date().toISOString(),
+      });
+    }
+    return reply.send({ id, status: next });
+  };
+  server.post("/mandates/:id/pause", setStatus("paused"));
+  server.post("/mandates/:id/resume", setStatus("active"));
 }

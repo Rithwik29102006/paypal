@@ -2,12 +2,15 @@ import Link from "next/link";
 
 export default function PayPalCancelPage() {
   return (
-    <div className="max-w-xl mx-auto mt-10 bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-4 text-sm">
-      <h1 className="font-bold text-slate-900 text-lg">PayPal setup cancelled</h1>
-      <p className="text-slate-600">
-        The mandate was signed, but no PayPal account was saved. Purchases will need your approval in PayPal each time until you connect it.
+    <div className="mx-auto mt-6 max-w-[560px] rounded-[26px] bg-white p-8 text-center sm:p-10">
+      <h1 className="text-[2rem] font-extrabold leading-tight">You left PayPal before finishing</h1>
+      <p className="mx-auto mt-3 max-w-[44ch] text-[1.05rem] text-ink-600">
+        Nothing was charged. Until a PayPal account is saved, each purchase asks you to approve it in PayPal.
       </p>
-      <Link href="/mandate" className="inline-block px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">Back to mandate</Link>
+      <div className="mt-7 flex justify-center gap-2">
+        <Link href="/" className="btn-pp">Back to the agent</Link>
+        <Link href="/mandate" className="btn-ghost">Rules</Link>
+      </div>
     </div>
   );
 }

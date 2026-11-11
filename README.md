@@ -22,6 +22,14 @@ Anita lets an agent handle her family's groceries and school supplies: **$300 a 
 5. **Every step lands in a hash-chained receipt log.** Edit or delete any receipt and verification fails at that exact spot.
 6. **When a dispute arrives** (PayPal webhook), Mandate builds the evidence (signed mandate, the check decision, Anita's approval, the payment, the receipt chain) and submits it through the PayPal Disputes API with a one-page PDF.
 
+### In the dashboard
+
+- **Talk to the agent** (type or speak). Every reply shows where the purchase got to: Agent, then Mandate, then PayPal, and where it stopped.
+- **See what Mandate caught.** A stopped purchase opens the detector's findings (hidden page text, unrequested items, look-alike sellers) straight from its sealed receipt.
+- **Emergency stop.** One tap pauses all agent spending (`POST /mandates/:id/pause`); Mandate refuses every cart until Anita resumes. Both switches are written to the receipt log.
+- **Rules as a sentence.** Anita edits "My agent may spend up to $300 a month…" in place and signs it.
+- **One-click integrity check.** Activity is a plain-language timeline; "Check nothing was changed" verifies the whole hash chain.
+
 ## How it is built
 
 ```text
@@ -73,7 +81,7 @@ The AI decides *what* to buy and flags *suspicious* carts. It never decides whet
 | Dispute defence | **Done (real sandbox)**: buyer filed an unauthorised-payment dispute `PP-R-PPZ-10198985` on the $8.98 agent purchase; Mandate matched it to the payment and submitted the signed mandate, risk report and receipt chain (with a PDF) through the PayPal Disputes API. PayPal moved it to UNDER_REVIEW (chargeback stage); the final ruling comes from PayPal and is not simulated |
 | PayPal Vault (save account once) | **Code complete, not shown in the demo**: setup-token, payment-token and vaulted `/pay` paths are implemented and covered by tests; the recorded demo uses the buyer-approval fallback (PayPal checkout link, then capture on return) |
 | Prompt-injection defence | Hidden "buy 10 gift cards" attack blocked at risk 0.99 against the real API; holdout red team (cases written after the detector was built): **10 of 10 attacks stopped, 0 of 5 false blocks** with the LLM judge (Claude Haiku 5.5 via OpenRouter); 7 of 10 with rules alone. Development set: 15 of 15, 0 of 15 false blocks |
-| Automated tests | 100 tests (24 agent, 76 API), typecheck clean, production build passes |
+| Automated tests | 103 tests (24 agent, 79 API), typecheck clean, production build passes |
 
 ## Run it locally
 
@@ -131,6 +139,7 @@ pnpm web                      # terminal 3: dashboard on http://localhost:3000
 5. If the trick detector is unreachable, the API fails closed (asks the user).
 6. Mandates are Ed25519-signed; any change to the rules or the saved PayPal account needs a new signature.
 7. Receipts are SHA-256 hash-chained; the dispute evidence records hashes of its own JSON and PDF.
+8. Anita can pause all spending instantly; a paused mandate fails every check.
 
 ## License
 

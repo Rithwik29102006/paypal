@@ -1,374 +1,167 @@
 "use client";
 
 import React, { useState } from "react";
-import { useMandate } from "@/lib/state";
+import { useMandate, type DisputeItem } from "@/lib/state";
 import { evidencePdfUrl } from "@/lib/api";
-import { formatCurrency, formatDate, truncateHash } from "@/lib/utils";
-import {
-  Scale,
-  ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
-  ExternalLink,
-  ArrowRight,
-  Send,
-  Lock,
-  Layers,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { categoriesSentence, disputeReason, listOf, money, when } from "@/lib/describe";
+import { Seal } from "@/components/Seal";
+import { cn } from "@/lib/utils";
+import { Check, FileText, Scale, X } from "lucide-react";
 
-export default function DisputesPage() {
-  const { disputes, defendDispute, resolveDispute, apiConnected, lastError } = useMandate();
-  const [selectedDisputeId, setSelectedDisputeId] = useState<string | null>(null);
-  const [defendingId, setDefendingId] = useState<string | null>(null);
+const STAGES = ["Buyer opened a dispute", "Mandate sent its proof", "PayPal decides"] as const;
 
-  const selectedDispute = disputes.find((d) => d.id === selectedDisputeId);
+function stageIndex(d: DisputeItem): number {
+  if (d.status === "won" || d.status === "lost") return 3;
+  if (d.status === "evidence_submitted") return 2;
+  return 1;
+}
 
-  const handleDefend = async (id: string) => {
-    setDefendingId(id);
-    await defendDispute(id);
-    setDefendingId(null);
-  };
+function Proof({ d }: { d: DisputeItem }) {
+  const e = d.evidence;
+  if (!e) return <p className="text-ink-600">The proof will appear here once Mandate sends it.</p>;
+  const items = e.cart.items.map((i) => String(i.name ?? i.sku ?? "item"));
+  const points = [
+    {
+      ok: e.mandate.signatureValid,
+      title: e.mandate.signatureValid ? "Anita signed the rules herself" : "The signature on the rules did not check out",
+      body: `Up to ${money(e.mandate.rules.monthlyCap)} a month on ${categoriesSentence(e.mandate.rules.allowedCategories)}, asking above ${money(e.mandate.rules.approvalAbove)}.`,
+    },
+    {
+      ok: e.cart.decision !== "block",
+      title: e.cart.decision === "allow" ? "The purchase fit those rules" : e.cart.decision === "needs_approval" ? "Anita was asked first" : "Mandate had flagged this cart",
+      body: `${listOf(items.slice(0, 4))} for ${money(e.cart.total)}${e.cart.userRequest ? `, after she asked: “${e.cart.userRequest}”` : ""}.`,
+    },
+    ...(e.approval
+      ? [{ ok: e.approval.status === "approved", title: e.approval.status === "approved" ? "Anita approved it" : "Anita did not approve it", body: e.approval.decidedAt ? when(e.approval.decidedAt) : "" }]
+      : []),
+    {
+      ok: /captur|complete/i.test(e.payment.status),
+      title: "PayPal took the payment through Mandate",
+      body: `${money(e.payment.amount)}, only after the rules were checked.`,
+    },
+    {
+      ok: e.chain.ok,
+      title: e.chain.ok ? "The history is untouched" : "The history was altered",
+      body: `${e.chain.checked} sealed entries checked.`,
+    },
+  ];
+  return (
+    <ul className="space-y-3">
+      {points.map((p) => (
+        <li key={p.title} className="flex gap-3">
+          <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white", p.ok ? "bg-go" : "bg-stop")}>
+            {p.ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+          </span>
+          <div>
+            <p className="font-medium text-ink">{p.title}</p>
+            {p.body && <p className="text-[0.95rem] text-ink-600">{p.body}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-  const handleResolve = async (id: string) => {
-    setDefendingId(id);
-    await resolveDispute(id, "won");
-    setDefendingId(null);
+function DisputeCard({ d }: { d: DisputeItem }) {
+  const { defendDispute, resolveDispute } = useMandate();
+  const [busy, setBusy] = useState<"" | "defend" | "rule">("");
+  const [showProof, setShowProof] = useState(false);
+  const stage = stageIndex(d);
+  const done = d.status === "won" || d.status === "lost";
+
+  const run = async (kind: "defend" | "rule") => {
+    setBusy(kind);
+    if (kind === "defend") await defendDispute(d.id);
+    else await resolveDispute(d.id, "won");
+    setBusy("");
   };
 
   return (
-    <div className="max-w-5xl space-y-8">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-            <Scale className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Dispute Defender
-            </h1>
-            <p className="text-xs text-slate-500">
-              When a buyer files a false claim ("I never ordered this"), Mandate compiles the Ed25519-signed rules and receipt chain slice as irrefutable evidence.
-            </p>
-          </div>
+    <article className="rounded-[24px] bg-white p-6 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-[52ch]">
+          <p className="text-sm text-ink-400">Opened {when(d.createdAt)}</p>
+          <h2 className="mt-1 text-[1.45rem] font-bold leading-snug">{disputeReason(d.reason)}</h2>
+          {d.amount !== null && <p className="mt-1 text-ink-600">A {money(d.amount)} purchase the agent made.</p>}
         </div>
-
-        <div
-          className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl border ${
-            apiConnected ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"
-          }`}
-        >
-          {apiConnected ? <ShieldCheck className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
-          <span>{apiConnected ? "Connected to Mandate API (PayPal Disputes)" : "Mandate API offline"}</span>
-        </div>
-      </div>
-
-      {lastError && (
-        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">{lastError}</div>
-      )}
-
-      {/* Disputes List */}
-      <div className="space-y-6">
-        {disputes.length === 0 && (
-          <div className="p-6 bg-white rounded-2xl border border-dashed border-slate-300 text-xs text-slate-500 space-y-1">
-            <p className="font-semibold text-slate-700">No disputes yet.</p>
-            <p>
-              Disputes arrive from PayPal webhooks (CUSTOMER.DISPUTE.CREATED). For a local demo run{" "}
-              <code className="font-mono bg-slate-100 px-1 rounded">pnpm --filter @mandate/api replay:dispute</code> (mock mode, labelled as a replay), or import a real sandbox dispute with{" "}
-              <code className="font-mono bg-slate-100 px-1 rounded">import:dispute -- PP-D-...</code>.
-            </p>
+        {done && (
+          <div className={cn("flex items-center gap-2 rounded-full px-4 py-2 font-semibold animate-stamp", d.status === "won" ? "bg-go-50 text-go" : "bg-stop-50 text-stop")}>
+            {d.status === "won" ? <Seal size={24} /> : <X className="h-5 w-5" />}
+            {d.status === "won" ? "Won. Payment stays." : "Lost. Payment refunded."}
           </div>
         )}
-        {disputes.map((d) => {
-          const isOpen = d.status === "open";
-          const isSubmitted = d.status === "evidence_submitted";
-          const isWon = d.status === "won";
-
-          return (
-            <div
-              key={d.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
-            >
-              {/* Header Bar */}
-              <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs uppercase font-bold px-3 py-1 rounded-full border ${
-                      isWon
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : isSubmitted
-                        ? "bg-amber-50 text-amber-800 border-amber-200"
-                        : "bg-rose-50 text-rose-800 border-rose-200"
-                    }`}
-                  >
-                    {isWon ? "WON" : isSubmitted ? "EVIDENCE SUBMITTED" : d.status === "lost" ? "LOST" : d.status.toUpperCase()}
-                  </span>
-                  <span className="font-mono text-xs font-bold text-slate-800">
-                    Dispute ID: {d.paypalDisputeId}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="text-slate-500 font-medium">Disputed Amount:</span>
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {d.amount === null ? "-" : formatCurrency(d.amount)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Status Progression Bar */}
-              <div className="px-6 py-4 bg-slate-50/70 border-b border-slate-100">
-                <div className="flex items-center justify-between max-w-2xl mx-auto text-xs font-medium">
-                  {/* Step 1 */}
-                  <div className="flex items-center gap-2 text-slate-800">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold">
-                      ✓
-                    </span>
-                    <span>1. Claim Filed</span>
-                  </div>
-                  <div className="flex-1 h-0.5 mx-3 bg-slate-200" />
-
-                  {/* Step 2 */}
-                  <div
-                    className={`flex items-center gap-2 ${
-                      isSubmitted || isWon ? "text-slate-800" : "text-slate-400"
-                    }`}
-                  >
-                    <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isSubmitted || isWon
-                          ? "bg-slate-800 text-white"
-                          : "bg-slate-200 text-slate-500"
-                      }`}
-                    >
-                      {isSubmitted || isWon ? "✓" : "2"}
-                    </span>
-                    <span>2. Evidence Built</span>
-                  </div>
-                  <div className="flex-1 h-0.5 mx-3 bg-slate-200" />
-
-                  {/* Step 3 */}
-                  <div
-                    className={`flex items-center gap-2 ${
-                      isSubmitted || isWon ? "text-brand-700 font-bold" : "text-slate-400"
-                    }`}
-                  >
-                    <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isWon
-                          ? "bg-slate-800 text-white"
-                          : isSubmitted
-                          ? "bg-brand-600 text-white"
-                          : "bg-slate-200 text-slate-500"
-                      }`}
-                    >
-                      {isWon ? "✓" : "3"}
-                    </span>
-                    <span>3. Submitted to PayPal</span>
-                  </div>
-                  <div className="flex-1 h-0.5 mx-3 bg-slate-200" />
-
-                  {/* Step 4 */}
-                  <div
-                    className={`flex items-center gap-2 ${
-                      isWon ? "text-emerald-700 font-bold" : "text-slate-400"
-                    }`}
-                  >
-                    <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isWon ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"
-                      }`}
-                    >
-                      {isWon ? "✓" : "4"}
-                    </span>
-                    <span>4. Dispute Won</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dispute Details */}
-              <div className="p-6 space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium block mb-0.5">Claim Reason:</span>
-                    <strong className="text-slate-800">{d.reason}</strong>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium block mb-0.5">Customer's request to the agent:</span>
-                    <strong className="text-slate-800">{d.evidence?.cart.userRequest ?? "-"}</strong>
-                    <span className="block text-[11px] text-slate-500 font-mono">Cart {d.cartId ?? "not linked"}</span>
-                  </div>
-
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 font-medium block mb-0.5">PayPal Order ID:</span>
-                    <strong className="text-slate-800 font-mono">{d.evidence?.payment.paypalOrderId ?? "-"}</strong>
-                    <span className="block text-[11px] text-slate-500">Capture: {d.captureId ?? "-"}</span>
-                  </div>
-                </div>
-
-                {d.lastError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-[11px]">{d.lastError}</div>
-                )}
-
-                {isWon && (
-                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <strong className="block text-sm font-bold text-emerald-950">Dispute resolved in the merchant's favour</strong>
-                      <p className="text-xs text-emerald-800 leading-relaxed">
-                        PayPal received the Ed25519-signed mandate, the /check decision and the SHA-256 receipt chain slice through{" "}
-                        <code className="font-mono bg-emerald-100/60 px-1 py-0.5 rounded text-[11px]">provide-evidence</code>.
-                        {d.paypalDisputeId.includes("REPLAY") ? " (Replayed dispute in mock mode, not a real PayPal case.)" : ""}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions Row */}
-                <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                  <button
-                    onClick={() => setSelectedDisputeId(d.id)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors flex items-center gap-1.5"
-                  >
-                    <FileText className="w-4 h-4 text-slate-500" />
-                    Inspect Evidence Package
-                  </button>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {d.evidence && (
-                      <a
-                        href={evidencePdfUrl(d.id)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-semibold transition-colors flex items-center gap-1.5"
-                      >
-                        <ExternalLink className="w-4 h-4 text-slate-500" />
-                        Evidence PDF
-                      </a>
-                    )}
-                    {(isOpen || d.status === "error") && (
-                      <button
-                        onClick={() => handleDefend(d.id)}
-                        disabled={defendingId === d.id || !d.paymentId}
-                        className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md shadow-brand-600/20 transition-all flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <Send className="w-4 h-4" />
-                        Build & Submit Defense Package
-                      </button>
-                    )}
-                    {isSubmitted && (
-                      <button
-                        onClick={() => handleResolve(d.id)}
-                        disabled={defendingId === d.id}
-                        title="Sandbox only: asks PayPal's sandbox to rule on the dispute (adjudicate)"
-                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                      >
-                        <Scale className="w-4 h-4" />
-                        Request sandbox ruling
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
-      {/* Evidence Package Drawer / Modal */}
-      {selectedDispute && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-brand-600" />
-                <h3 className="font-bold text-slate-900 text-lg">
-                  PayPal Dispute Evidence Package
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedDisputeId(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <ol className="mt-6 grid grid-cols-3 gap-2" aria-label="Dispute progress">
+        {STAGES.map((s, i) => {
+          const reached = i < stage;
+          return (
+            <li key={s}>
+              <span className={cn("block h-1.5 rounded-full", reached ? (i === 2 && d.status === "lost" ? "bg-stop" : "bg-go") : "bg-line")} />
+              <span className={cn("mt-2 block text-sm", reached ? "font-medium text-ink" : "text-ink-400")}>{s}</span>
+            </li>
+          );
+        })}
+      </ol>
 
-            <p className="text-xs text-slate-500">
-              Payload compiled for <strong>POST /v1/customer/disputes/{selectedDispute.paypalDisputeId}/provide-evidence</strong>:
-            </p>
+      {d.status === "error" && d.lastError && (
+        <p className="mt-5 rounded-2xl bg-stop-50 px-4 py-3 text-stop">Sending the proof failed: {d.lastError}</p>
+      )}
+      {d.status === "evidence_submitted" && (
+        <p className="mt-5 text-ink-600">PayPal has the proof and is reviewing the case. Its decision shows up here automatically.</p>
+      )}
 
-            <div className="space-y-4 text-xs font-mono">
-              {/* Evidence Slice 1: Signed Mandate */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
-                <strong className="text-slate-900 block font-sans text-xs flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-brand-600" />
-                  1. Cryptographic Mandate & User Signature
-                </strong>
-                <p className="text-slate-600 text-[11px]">
-                  Mandate ID: <strong>{selectedDispute.evidence?.mandate.id}</strong> (User: {selectedDispute.evidence?.mandate.userId}) · Signature{" "}
-                  <strong className={selectedDispute.evidence?.mandate.signatureValid ? "text-emerald-700" : "text-rose-700"}>
-                    {selectedDispute.evidence?.mandate.signatureValid ? "VALID" : "INVALID"}
-                  </strong>
-                </p>
-                <p className="text-slate-600 text-[11px]">
-                  Signature: <strong className="text-brand-700 break-all">{selectedDispute.evidence?.mandate.signature}</strong>
-                </p>
-                <p className="text-slate-600 text-[11px]">
-                  PublicKey: <span className="break-all">{truncateHash(selectedDispute.evidence?.mandate.publicKey ?? "", 24)}</span>
-                </p>
-                <p className="text-slate-600 text-[11px]">
-                  Allowed Categories: {selectedDispute.evidence?.mandate.rules.allowedCategories.join(", ")}
-                </p>
-              </div>
+      <div className="mt-6 flex flex-wrap gap-2">
+        {(d.status === "open" || d.status === "error") && (
+          <button onClick={() => run("defend")} disabled={!!busy} className="btn-pp">
+            <Scale className="h-4 w-4" /> {busy === "defend" ? "Sending…" : "Send proof to PayPal"}
+          </button>
+        )}
+        {d.evidence && (
+          <button onClick={() => setShowProof((s) => !s)} className="btn-ghost" aria-expanded={showProof}>
+            {showProof ? "Hide the proof" : "See the proof"}
+          </button>
+        )}
+        {d.evidence && (
+          <a href={evidencePdfUrl(d.id)} target="_blank" rel="noreferrer" className="btn-ghost">
+            <FileText className="h-4 w-4" /> Proof as PDF
+          </a>
+        )}
+        {d.status === "evidence_submitted" && (
+          <button onClick={() => run("rule")} disabled={!!busy} className="btn-quiet" title="PayPal sandbox only">
+            {busy === "rule" ? "Asking PayPal…" : "Ask the PayPal sandbox to decide"}
+          </button>
+        )}
+      </div>
 
-              {/* Evidence Slice 2: Receipt Chain Slice */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
-                <strong className="text-slate-900 block font-sans text-xs flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-brand-600" />
-                  2. SHA-256 Receipt Chain Slice
-                </strong>
-                <p className="text-slate-600 text-[11px]">
-                  Chain: <strong>{selectedDispute.evidence?.chain.ok ? `verified (${selectedDispute.evidence?.chain.checked} receipts)` : `BROKEN at #${selectedDispute.evidence?.chain.brokenSeq}`}</strong>
-                </p>
-                {(selectedDispute.evidence?.receipts ?? []).map((r) => (
-                  <div key={r.seq} className="text-[11px] text-slate-600 border-t border-slate-200/60 pt-1 mt-1">
-                    seq #{r.seq} [{r.type}] · hash: <strong className="text-slate-800">{truncateHash(r.hash, 8)}</strong>
-                  </div>
-                ))}
-              </div>
-
-              {/* Evidence Slice 3: Check Decision */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
-                <strong className="text-slate-900 block font-sans text-xs flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  3. Pre-Payment /check Decision Audit
-                </strong>
-                <p className="text-slate-600 text-[11px]">
-                  Verdict: <strong className="text-emerald-700 font-bold">{selectedDispute.evidence?.cart.decision.toUpperCase()}</strong> · Risk: {selectedDispute.evidence?.cart.riskScore}
-                  {selectedDispute.evidence?.approval ? ` · Customer ${selectedDispute.evidence.approval.status} at ${formatDate(selectedDispute.evidence.approval.decidedAt ?? "")}` : ""}
-                </p>
-                <p className="text-slate-600 text-[11px]">
-                  Reasons: {selectedDispute.evidence?.cart.reasons.join("; ")}
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
-              <button
-                onClick={() => setSelectedDisputeId(null)}
-                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors"
-              >
-                Close Drawer
-              </button>
-            </div>
-          </div>
+      {showProof && (
+        <div className="mt-6 rounded-[20px] bg-mist p-5 animate-rise">
+          <p className="mb-4 font-display text-[1.15rem] font-semibold">What Mandate told PayPal</p>
+          <Proof d={d} />
         </div>
       )}
+    </article>
+  );
+}
+
+export default function DisputesPage() {
+  const { disputes } = useMandate();
+  return (
+    <div className="max-w-[860px]">
+      <h1 className="text-[2.4rem] font-extrabold leading-tight">Disputes</h1>
+      <p className="mt-2 max-w-[60ch] text-[1.08rem] text-ink-600">
+        When a buyer tells PayPal “I never ordered this”, Mandate answers with Anita&apos;s signed rules, the check it ran and the sealed history.
+      </p>
+      <div className="mt-8 space-y-5">
+        {disputes.length === 0 ? (
+          <div className="rounded-[22px] border border-dashed border-line bg-white/60 p-8">
+            <p className="text-[1.15rem] font-semibold">No disputes. Every purchase so far stands.</p>
+            <p className="mt-1 text-ink-600">If a buyer opens one in PayPal, it shows up here and Mandate sends its proof automatically.</p>
+          </div>
+        ) : (
+          disputes.map((d) => <DisputeCard key={d.id} d={d} />)
+        )}
+      </div>
     </div>
   );
 }
