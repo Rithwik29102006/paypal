@@ -130,6 +130,12 @@ export class AgentSession {
       }
       if (pay.status === "created") {
         this.emit({ type: "payment", cartId: check.cartId, summary: `PayPal order ${pay.paypalOrderId} created for $${cart.total.toFixed(2)}; waiting for the buyer to approve it in PayPal` });
+        this.emit({
+          type: "agent",
+          cartId: check.cartId,
+          summary: `Approve the $${cart.total.toFixed(2)} PayPal order to finish this purchase (no saved PayPal account yet)`,
+          approveUrl: pay.approveUrl,
+        });
         return {
           status: "awaiting_buyer_approval",
           cartId: check.cartId,

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 export default function AgentConsolePage() {
-  const { runAgentRequest, agentRunning, agentHistory, mandate } = useMandate();
+  const { runAgentRequest, agentRunning, agentHistory, mandate, paypalApproval } = useMandate();
   const [inputPrompt, setInputPrompt] = useState("");
 
   const samplePrompts = [
@@ -187,6 +187,17 @@ export default function AgentConsolePage() {
 
         {/* Input Bar */}
         <div className="p-4 border-t border-slate-200 bg-slate-50/60">
+          {paypalApproval && (
+            <div className="mb-3 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs flex items-center justify-between gap-3">
+              <span>{paypalApproval.summary}. After you approve, PayPal brings you back here and the payment is captured.</span>
+              <a
+                href={paypalApproval.url}
+                className="flex-shrink-0 px-3 py-2 bg-[#0070ba] hover:bg-[#005ea6] text-white rounded-lg font-bold"
+              >
+                Approve in PayPal
+              </a>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="flex gap-2">
             <input
               type="text"

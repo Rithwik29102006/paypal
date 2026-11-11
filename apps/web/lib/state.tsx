@@ -65,6 +65,9 @@ interface MandateContextType {
   agentConnected: boolean;
   backendUrl: string;
   lastError: string | null;
+  /** Set when a purchase needs the buyer to approve the PayPal order (no saved PayPal account). */
+  paypalApproval: { url: string; summary: string } | null;
+  clearPaypalApproval: () => void;
   refresh: () => Promise<void>;
   setMandateId: (id: string) => void;
 }
@@ -128,6 +131,7 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
   const [apiConnected, setApiConnected] = useState(false);
   const [agentConnected, setAgentConnected] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [paypalApproval, setPaypalApproval] = useState<{ url: string; summary: string } | null>(null);
   const mandateIdRef = useRef(mandateId);
   mandateIdRef.current = mandateId;
 
@@ -299,6 +303,7 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
       if (!agentConnected) throw new Error(`Agent server is offline (${api.AGENT_URL}). Start it with: pnpm agent:server`);
       const text = await api.runAgent(request, mandateId, (ev) => {
         // check/approval/payment events also arrive from the API stream; show only the agent's own steps here.
+        if (ev.approveUrl) setPaypalApproval({ url: ev.approveUrl, summary: ev.summary ?? "Approve the PayPal order" });
         if (ev.type === "agent" && ev.summary) {
           const e: LiveEvent = { type: "agent", summary: ev.summary, at: ev.at ?? new Date().toISOString() };
           collected.push(e);
@@ -345,6 +350,8 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
         agentConnected,
         backendUrl: api.API_URL,
         lastError,
+        paypalApproval,
+        clearPaypalApproval: () => setPaypalApproval(null),
         refresh,
         setMandateId,
       }}

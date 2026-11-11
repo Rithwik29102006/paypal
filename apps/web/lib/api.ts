@@ -68,6 +68,15 @@ export const decideApproval = (id: string, approved: boolean) =>
     body: JSON.stringify({ approved }),
   });
 
+// ---------- Payments ----------
+
+/** POST /pay again for a cart: captures an order the buyer has just approved in PayPal (idempotent). */
+export const payCart = (cartId: string) =>
+  call<{ paymentId: string; paypalOrderId: string; captureId: string | null; status: string; approveUrl?: string }>(API_URL, "/pay", {
+    method: "POST",
+    body: JSON.stringify({ cartId }),
+  });
+
 // ---------- Receipts ----------
 
 interface ApiReceipt {
@@ -126,6 +135,7 @@ export function subscribeEvents(onEvent: (e: LiveEventV2) => void, onStatus: (op
 
 export interface AgentStreamEvent {
   type: string;
+  approveUrl?: string;
   summary?: string;
   text?: string;
   at?: string;

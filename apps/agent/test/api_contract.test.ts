@@ -50,6 +50,8 @@ describe("agent <-> Mandate API contract", () => {
     expect(out.status).toBe("awaiting_buyer_approval");
     expect(out.approveUrl).toContain("sandbox.paypal.com");
     expect(s.events.some((e) => e.summary.startsWith("Paid"))).toBe(false);
+    // The dashboard shows an "Approve in PayPal" button from this event.
+    expect(s.events.find((e) => e.approveUrl)?.approveUrl).toContain("sandbox.paypal.com");
   });
 
   it("/pay 403 (second lock) -> error, nothing paid", async () => {

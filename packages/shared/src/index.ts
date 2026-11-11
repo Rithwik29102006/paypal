@@ -143,6 +143,8 @@ export const LiveEvent = z.object({
   decision: Decision.optional(),
   summary: z.string(),
   at: z.string(),
+  /** PayPal link the buyer must open (no saved payment method). */
+  approveUrl: z.string().optional(),
 });
 export type LiveEvent = z.infer<typeof LiveEvent>;
 
