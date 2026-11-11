@@ -85,16 +85,37 @@ async function handleEvent(type: string, resource: Record<string, unknown>, payp
       return count > 0 ? { captureId, status } : "ignored";
     }
 
-    case "CUSTOMER.DISPUTE.CREATED": {
-      const dispute = await recordDispute(resource as DisputeResource);
-      // Defend automatically when we can link it to one of our payments.
-      if (dispute.paymentId && dispute.status === "open") {
-        await defendDispute(dispute.id, paypal).catch(() => undefined); // error is stored on the row; retry via POST /disputes/:id/defend
+    case "CUSTOMER.DISPUTE.CREATED":
+    case "CUSTOMER.DISPUTE.UPDATED": {
+      const r = resource as DisputeResource;
+      const disputeId = r.dispute_id ?? r.id;
+      if (!disputeId) return "ignored";
+
+      // If an outcome is already resolved (won/lost), record it.
+      const outcome = outcomeToStatus(r.dispute_outcome?.outcome_code);
+      if (outcome) {
+        await setOutcome(disputeId, outcome, `PayPal webhook ${type}`);
+        return { disputeId, outcome };
       }
-      return { disputeId: dispute.disputeId };
+
+      // Locate or create the Dispute row if CREATED or UPDATED in WAITING_FOR_SELLER_RESPONSE
+      let dispute = await prisma.dispute.findUnique({ where: { disputeId } });
+      if (!dispute) {
+        if (type === "CUSTOMER.DISPUTE.CREATED" || r.status === "WAITING_FOR_SELLER_RESPONSE") {
+          dispute = await recordDispute(r);
+        }
+      }
+
+      // Defend once: only if linked to our payment and locally still in "open" status
+      if (dispute?.paymentId && dispute.status === "open") {
+        if (type === "CUSTOMER.DISPUTE.CREATED" || r.status === "WAITING_FOR_SELLER_RESPONSE") {
+          await defendDispute(dispute.id, paypal).catch(() => undefined); // error stored on row
+        }
+      }
+
+      return { disputeId, status: dispute?.status ?? "recorded" };
     }
 
-    case "CUSTOMER.DISPUTE.UPDATED":
     case "CUSTOMER.DISPUTE.RESOLVED": {
       const r = resource as DisputeResource;
       const disputeId = r.dispute_id ?? r.id;

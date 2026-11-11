@@ -115,9 +115,12 @@ export async function buildEvidence(disputeRowId: string): Promise<DisputeEviden
   const chain = await verifyChain(mandate.id);
   const total = cart.totalCents / 100;
   const approved = cart.approval?.status === "approved";
+  const originalAmount = (payment.amountCents / 100).toFixed(2);
+  const disputedAmount = dispute.amountCents !== null ? (dispute.amountCents / 100).toFixed(2) : total.toFixed(2);
 
   const summary =
     `This payment was made by the customer's own AI shopping agent under a spending mandate the customer signed on ${createdAt.slice(0, 10)}. ` +
+    `Original captured payment: ${originalAmount} USD; disputed amount: ${disputedAmount} USD. ` +
     `Before PayPal was charged, Mandate checked the cart against those rules: decision ${cart.decision.toUpperCase()}` +
     (approved ? `, and the customer explicitly approved it at ${cart.approval?.decidedAt?.toISOString()}` : "") +
     `. The mandate signature is ${signatureValid ? "valid" : "INVALID"} and the receipt chain ${chain.ok ? "verifies end to end" : "is broken"}.`;
@@ -125,6 +128,7 @@ export async function buildEvidence(disputeRowId: string): Promise<DisputeEviden
   return DisputeEvidence.parse({
     disputeId: dispute.disputeId,
     generatedAt: new Date().toISOString(),
+    disputedAmount: dispute.amountCents !== null ? dispute.amountCents / 100 : undefined,
     mandate: { id: mandate.id, userId: mandate.userId, rules, signature: mandate.signature, publicKey: mandate.publicKey, signatureValid, createdAt },
     cart: {
       id: cart.id,

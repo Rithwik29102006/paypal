@@ -148,6 +148,41 @@ describe("Webhooks and dispute defender", () => {
     expect(paypal.callCounts.provideEvidence).toBe(1);
   });
 
+  it("CUSTOMER.DISPUTE.UPDATED for unknown dispute in WAITING_FOR_SELLER_RESPONSE records and defends once", async () => {
+    const event = {
+      id: `WH-${randomUUID()}`,
+      event_type: "CUSTOMER.DISPUTE.UPDATED",
+      resource: {
+        dispute_id: "PP-D-TEST-UPDATED-1",
+        reason: "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+        status: "WAITING_FOR_SELLER_RESPONSE",
+        dispute_amount: { currency_code: "USD", value: "5.00" },
+        disputed_transactions: [{ seller_transaction_id: captureId }],
+      },
+    };
+    const res = await webhook(event);
+    expect(res.statusCode).toBe(200);
+
+    const row = await prisma.dispute.findUnique({ where: { disputeId: "PP-D-TEST-UPDATED-1" } });
+    expect(row?.status).toBe("evidence_submitted");
+    expect(row?.paymentId).toBeTruthy();
+    expect(row?.amountCents).toBe(500);
+    expect(paypal.callCounts.provideEvidence).toBe(1);
+
+    const sent = paypal.evidences.get("PP-D-TEST-UPDATED-1");
+    expect(sent?.notes).toMatch(/Original captured payment: 10.47 USD/);
+    expect(sent?.notes).toMatch(/disputed amount: 5.00 USD/);
+
+    // Replay with new webhook ID does not re-submit
+    const secondEvent = {
+      ...event,
+      id: `WH-${randomUUID()}`,
+    };
+    const res2 = await webhook(secondEvent);
+    expect(res2.statusCode).toBe(200);
+    expect(paypal.callCounts.provideEvidence).toBe(1);
+  });
+
   it("GET /disputes returns the evidence the dashboard drawer needs", async () => {
     await webhook(disputeCreated("PP-D-TEST-3", captureId));
     const res = await server.inject({ method: "GET", url: "/disputes" });
@@ -242,8 +277,10 @@ describe("SandboxPayPal dispute calls", () => {
 
     expect(seen!.body).toBeInstanceOf(FormData);
     const form = seen!.body as FormData;
-    expect(JSON.parse(String(form.get("input")))).toEqual({ evidences: [{ evidence_type: "OTHER", notes: "authorised" }] });
-    expect(form.get("evidence-file")).toBeInstanceOf(Blob);
+    const inputPart = form.get("input");
+    const jsonStr = inputPart instanceof Blob ? await inputPart.text() : String(inputPart);
+    expect(JSON.parse(jsonStr)).toEqual({ evidences: [{ evidence_type: "OTHER", notes: "authorised" }] });
+    expect(form.get("file1")).toBeInstanceOf(Blob);
     expect(seen!.headers["Content-Type"]).toBeUndefined(); // fetch adds the multipart boundary
     expect(seen!.headers["PayPal-Request-Id"]).toBe("req-1");
   });

@@ -246,12 +246,19 @@ export class SandboxPayPal implements PayPalClient {
         json = {};
       }
 
+      if (path.includes("provide-evidence")) {
+        console.log(`[PayPal Sandbox] provide-evidence response: HTTP ${res.status}, body:`, JSON.stringify(json));
+      }
+
       if (!res.ok) {
         let message = `Request to ${path} failed with HTTP ${res.status}`;
         if (json && typeof json === "object") {
           const obj = json as Record<string, unknown>;
           if (typeof obj.message === "string") message = obj.message;
           if (typeof obj.debug_id === "string") debugId = obj.debug_id;
+        }
+        if (path.includes("provide-evidence")) {
+          console.error(`[PayPal Sandbox] provide-evidence FAILED: HTTP ${res.status}, debug_id: ${debugId}, message: ${message}, body:`, JSON.stringify(json));
         }
         throw new PayPalApiError(message, res.status, debugId);
       }
@@ -535,23 +542,19 @@ export class SandboxPayPal implements PayPalClient {
     // the provide-evidence API reference. Sandbox test data asks for
     // evidence_type OTHER with notes (developer.paypal.com/disputes/test-go-live).
     const form = new FormData();
-    form.append(
-      "input",
-      JSON.stringify({
-        evidences: [
-          {
-            evidence_type: input.evidenceType || "OTHER",
-            notes: input.notes.slice(0, 2000),
-          },
-        ],
-      })
-    );
+    const inputJson = JSON.stringify({
+      evidences: [
+        {
+          evidence_type: input.evidenceType || "OTHER",
+          notes: input.notes.slice(0, 2000),
+        },
+      ],
+    });
+    // PayPal requires the multipart JSON part to declare Content-Type: application/json
+    form.append("input", new Blob([inputJson], { type: "application/json" }));
     if (input.fileBuffer) {
-      form.append(
-        "evidence-file",
-        new Blob([new Uint8Array(input.fileBuffer)], { type: "application/pdf" }),
-        input.fileName || "mandate-evidence.pdf"
-      );
+      const fileBlob = new Blob([new Uint8Array(input.fileBuffer)], { type: "application/pdf" });
+      form.append("file1", fileBlob, input.fileName || "mandate-evidence.pdf");
     }
 
     await this.request<unknown>(

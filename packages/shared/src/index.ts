@@ -237,6 +237,7 @@ export type DisputeStatus = z.infer<typeof DisputeStatus>;
 export const DisputeEvidence = z.object({
   disputeId: z.string(),
   generatedAt: z.string(),
+  disputedAmount: z.number().optional(),
   mandate: z.object({
     id: z.string(),
     userId: z.string(),
