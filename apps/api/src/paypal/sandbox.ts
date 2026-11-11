@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { config } from "../config.js";
 import type {
@@ -127,6 +128,34 @@ const DisputeResponseSchema = z.object({
   create_time: z.string().optional(),
 });
 
+/**
+ * Hand-built multipart/form-data body. PayPal's provide-evidence wants the
+ * "input" part as `Content-Type: application/json` with no filename (exactly
+ * what curl sends for `-F 'input={...};type=application/json'`); fetch's
+ * FormData cannot express that, and a plain text part is rejected with 400.
+ */
+export class MultipartBody {
+  constructor(
+    public readonly buffer: Buffer,
+    public readonly contentType: string
+  ) {}
+}
+
+type MultipartPart = { name: string; data: string | Buffer; contentType: string; filename?: string };
+
+export function buildMultipart(parts: MultipartPart[]): MultipartBody {
+  const boundary = `----MandateBoundary${randomBytes(12).toString("hex")}`;
+  const chunks: Buffer[] = [];
+  for (const p of parts) {
+    const disposition = `form-data; name="${p.name}"${p.filename ? `; filename="${p.filename}"` : ""}`;
+    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: ${disposition}\r\nContent-Type: ${p.contentType}\r\n\r\n`));
+    chunks.push(typeof p.data === "string" ? Buffer.from(p.data, "utf8") : p.data);
+    chunks.push(Buffer.from("\r\n"));
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  return new MultipartBody(Buffer.concat(chunks), `multipart/form-data; boundary=${boundary}`);
+}
+
 export class SandboxPayPal implements PayPalClient {
   private baseUrl = "https://api-m.sandbox.paypal.com";
   private tokenCache: CachedToken | null = null;
@@ -210,11 +239,13 @@ export class SandboxPayPal implements PayPalClient {
     const { accessToken: token } = await this.getAccessToken();
 
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+    const isMultipart = body instanceof MultipartBody;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     };
-    // For multipart bodies fetch sets Content-Type (with the boundary) itself.
-    if (!isForm) headers["Content-Type"] = "application/json";
+    // For FormData bodies fetch sets Content-Type (with the boundary) itself.
+    if (isMultipart) headers["Content-Type"] = (body as MultipartBody).contentType;
+    else if (!isForm) headers["Content-Type"] = "application/json";
 
     if (method === "POST") {
       headers["PayPal-Request-Id"] = requestId;
@@ -227,7 +258,13 @@ export class SandboxPayPal implements PayPalClient {
       const res = await this.fetchFn(`${this.baseUrl}${path}`, {
         method,
         headers,
-        body: isForm ? (body as FormData) : body ? JSON.stringify(body) : undefined,
+        body: isMultipart
+          ? new Uint8Array((body as MultipartBody).buffer)
+          : isForm
+            ? (body as FormData)
+            : body
+              ? JSON.stringify(body)
+              : undefined,
         signal: controller.signal,
       });
 
@@ -252,6 +289,13 @@ export class SandboxPayPal implements PayPalClient {
           const obj = json as Record<string, unknown>;
           if (typeof obj.message === "string") message = obj.message;
           if (typeof obj.debug_id === "string") debugId = obj.debug_id;
+          // PayPal puts the useful part (which field, what is wrong) in details[].
+          if (Array.isArray(obj.details) && obj.details.length > 0) {
+            const parts = (obj.details as Record<string, unknown>[]).map((d) =>
+              [d.issue, d.field, d.description].filter((x) => typeof x === "string" && x).join(" ")
+            );
+            message += ` [${parts.join("; ")}]`;
+          }
         }
         throw new PayPalApiError(message, res.status, debugId);
       }
@@ -534,30 +578,35 @@ export class SandboxPayPal implements PayPalClient {
     // Source: developer.paypal.com/platforms/disputes/integrate-disputes and
     // the provide-evidence API reference. Sandbox test data asks for
     // evidence_type OTHER with notes (developer.paypal.com/disputes/test-go-live).
-    const form = new FormData();
-    form.append(
-      "input",
-      JSON.stringify({
-        evidences: [
-          {
-            evidence_type: input.evidenceType || "OTHER",
-            notes: input.notes.slice(0, 2000),
-          },
-        ],
-      })
-    );
-    if (input.fileBuffer) {
-      form.append(
-        "evidence-file",
-        new Blob([new Uint8Array(input.fileBuffer)], { type: "application/pdf" }),
-        input.fileName || "mandate-evidence.pdf"
-      );
-    }
+    const body = buildMultipart([
+      {
+        name: "input",
+        contentType: "application/json",
+        data: JSON.stringify({
+          evidences: [
+            {
+              evidence_type: input.evidenceType || "OTHER",
+              notes: input.notes.slice(0, 2000),
+            },
+          ],
+        }),
+      },
+      ...(input.fileBuffer
+        ? [
+            {
+              name: "evidence-file",
+              filename: input.fileName || "mandate-evidence.pdf",
+              contentType: "application/pdf",
+              data: input.fileBuffer,
+            },
+          ]
+        : []),
+    ]);
 
     await this.request<unknown>(
       `/v1/customer/disputes/${encodeURIComponent(disputeId)}/provide-evidence`,
       "POST",
-      form,
+      body,
       requestId
     );
     return { status: "SUCCESS" };

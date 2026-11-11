@@ -213,6 +213,22 @@ export async function sandboxResolve(disputeRowId: string, outcome: "won" | "los
   const dispute = await prisma.dispute.findUnique({ where: { id: disputeRowId } });
   if (!dispute) throw new DisputeError("dispute not found", 404);
   if (dispute.status !== "evidence_submitted") throw new DisputeError("submit evidence before asking for a ruling", 409);
+  if (config.PAYPAL_MODE === "sandbox") {
+    // PayPal only adjudicates while the dispute is UNDER_REVIEW with an "adjudicate" link.
+    const remote = await paypal.getDispute(dispute.disputeId);
+    const raw = (remote.raw ?? {}) as { links?: { rel: string }[]; dispute_outcome?: { outcome_code?: string } };
+    if (remote.status === "RESOLVED") {
+      const code = raw.dispute_outcome?.outcome_code ?? "";
+      const final = code.includes("SELLER") ? "won" : code.includes("BUYER") ? "lost" : outcome;
+      return toView((await setOutcome(dispute.disputeId, final, `PayPal sandbox ruling (${code || "resolved"})`))!);
+    }
+    if (!(raw.links ?? []).some((l) => l.rel === "adjudicate")) {
+      throw new DisputeError(
+        `PayPal is not ready to rule yet (dispute is ${remote.status}; a ruling is only allowed in UNDER_REVIEW). Try again in a few minutes.`,
+        409
+      );
+    }
+  }
   try {
     await paypal.adjudicate(dispute.disputeId, outcome === "won" ? "SELLER_FAVOR" : "BUYER_FAVOR", randomUUID());
   } catch (err) {

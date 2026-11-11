@@ -67,11 +67,12 @@ The AI decides *what* to buy and flags *suspicious* carts. It never decides whet
 | What | Status |
 | --- | --- |
 | Real PayPal sandbox purchase | **Done**: a $3.49 order created, approved by the sandbox buyer and captured |
+| AI agent end to end | **Done**: Claude Sonnet 5.5 (via OpenRouter) built a $8.98 grocery cart, skipped the look-alike seller `dem0-store` on its own, Mandate `/check` allowed it, the sandbox buyer approved in PayPal and the payment was captured |
 | Real PayPal webhook | **Done**: signed webhook received (via ngrok), signature verified, duplicate delivery ignored |
 | Receipt chain after the real flow | **Verified** |
-| Dispute defence | _Fill in: "Real sandbox dispute PP-D-… defended, ruled in our favour" or "Replayed with `replay:dispute` (mock); evidence and PDF are real, the dispute is not"_ |
-| PayPal Vault (save account once) | _Fill in: verified in sandbox / code complete, demo uses the buyer-approval fallback_ |
-| Prompt-injection defence | Hidden "buy 10 gift cards" attack blocked at risk 0.99 against the real API; holdout red team: _fill in with LLM judge_ (7 of 10 attacks stopped with rules alone, 0 false blocks) |
+| Dispute defence | **Done (real sandbox)**: buyer filed an unauthorised-payment dispute `PP-R-PPZ-10198985` on the $8.98 agent purchase; Mandate matched it to the payment and submitted the signed mandate, risk report and receipt chain (with a PDF) through the PayPal Disputes API. PayPal moved it to UNDER_REVIEW (chargeback stage); the final ruling comes from PayPal and is not simulated |
+| PayPal Vault (save account once) | **Code complete, not shown in the demo**: setup-token, payment-token and vaulted `/pay` paths are implemented and covered by tests; the recorded demo uses the buyer-approval fallback (PayPal checkout link, then capture on return) |
+| Prompt-injection defence | Hidden "buy 10 gift cards" attack blocked at risk 0.99 against the real API; holdout red team (cases written after the detector was built): **10 of 10 attacks stopped, 0 of 5 false blocks** with the LLM judge (Claude Haiku 5.5 via OpenRouter); 7 of 10 with rules alone. Development set: 15 of 15, 0 of 15 false blocks |
 | Automated tests | 100 tests (24 agent, 76 API), typecheck clean, production build passes |
 
 ## Run it locally

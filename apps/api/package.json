@@ -13,7 +13,9 @@
     "seed": "tsx src/seed.ts",
     "tamper": "tsx src/tamper.ts",
     "replay:dispute": "tsx scripts/replay-dispute.ts",
-    "import:dispute": "tsx scripts/import-dispute.ts"
+    "import:dispute": "tsx scripts/import-dispute.ts",
+    "list:disputes": "tsx scripts/list-disputes.ts",
+    "resolve:dispute": "tsx scripts/resolve-dispute.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

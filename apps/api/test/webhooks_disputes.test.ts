@@ -240,11 +240,14 @@ describe("SandboxPayPal dispute calls", () => {
     const client = new SandboxPayPal(fakeFetch);
     await client.provideEvidence("PP-D-1", { notes: "authorised", evidenceType: "OTHER", fileBuffer: Buffer.from("%PDF-1.3"), fileName: "e.pdf" }, "req-1");
 
-    expect(seen!.body).toBeInstanceOf(FormData);
-    const form = seen!.body as FormData;
-    expect(JSON.parse(String(form.get("input")))).toEqual({ evidences: [{ evidence_type: "OTHER", notes: "authorised" }] });
-    expect(form.get("evidence-file")).toBeInstanceOf(Blob);
-    expect(seen!.headers["Content-Type"]).toBeUndefined(); // fetch adds the multipart boundary
+    const ct = seen!.headers["Content-Type"];
+    expect(ct).toMatch(/^multipart\/form-data; boundary=/);
+    const raw = Buffer.from(seen!.body as Uint8Array).toString("utf8");
+    // input part: JSON content type, no filename (matches curl -F 'input=...;type=application/json')
+    expect(raw).toContain('Content-Disposition: form-data; name="input"\r\nContent-Type: application/json\r\n\r\n{"evidences":[{"evidence_type":"OTHER","notes":"authorised"}]}');
+    expect(raw).toContain('Content-Disposition: form-data; name="evidence-file"; filename="e.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.3');
+    const boundary = ct.split("boundary=")[1];
+    expect(raw.trimEnd().endsWith(`--${boundary}--`)).toBe(true);
     expect(seen!.headers["PayPal-Request-Id"]).toBe("req-1");
   });
 

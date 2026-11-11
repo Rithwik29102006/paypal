@@ -9,29 +9,29 @@
 #   3. In the PayPal developer app, set the webhook URL to
 #      <API URL>/webhooks/paypal and put its id in PAYPAL_WEBHOOK_ID.
 #
-# Database: SQLite on a persistent disk (the Prisma schema is SQLite; Render's
-# own disk is wiped on redeploy, so the DB lives on /var/data).
+# Plan: FREE. Free services sleep after 15 min idle (first request then takes
+# about a minute) and have no persistent disk, so the SQLite database is
+# recreated (migrate + seed) on every start: each wake-up is a fresh demo with
+# the signed demo mandate. For a persistent DB switch to plan: starter and add
+#   disk: { name: mandate-data, mountPath: /var/data, sizeGB: 1 }
+# with DATABASE_URL=file:/var/data/mandate.db.
 
 services:
   # Mandate API (Member 2): the only service with PayPal credentials
   - type: web
     name: mandate-api
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @mandate/api exec prisma generate
     startCommand: pnpm --filter @mandate/api exec prisma migrate deploy && pnpm --filter @mandate/api seed && pnpm --filter @mandate/api start
     healthCheckPath: /health
-    disk:
-      name: mandate-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: "20"
       - key: PORT
         value: "4000"
       - key: DATABASE_URL
-        value: file:/var/data/mandate.db
+        value: file:./mandate.db
       - key: PAYPAL_MODE
         value: sandbox
       - key: PAYPAL_CLIENT_ID
@@ -61,7 +61,7 @@ services:
   - type: web
     name: mandate-agent
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile
     startCommand: pnpm --filter @mandate/agent start
     healthCheckPath: /health
@@ -76,7 +76,7 @@ services:
         value: mdt_demo
       # anthropic or openrouter; set the matching key below (leave the other empty)
       - key: LLM_PROVIDER
-        value: anthropic
+        value: openrouter
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: OPENROUTER_API_KEY
@@ -89,7 +89,7 @@ services:
   - type: web
     name: mandate-web
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @mandate/web build
     startCommand: pnpm --filter @mandate/web exec next start -p $PORT
     envVars:
