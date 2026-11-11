@@ -37,6 +37,9 @@ export const config = {
   agentModel: process.env.AGENT_MODEL || DEFAULT_MODELS[llmProvider].agent,
   /** Smaller, faster model for the trick detector's LLM judge. */
   detectorModel: process.env.DETECTOR_MODEL || DEFAULT_MODELS[llmProvider].detector,
+  /** Output-token caps per call (keeps cost low; providers default to the model's max). */
+  agentMaxTokens: num("AGENT_MAX_TOKENS", 2000),
+  detectorMaxTokens: num("DETECTOR_MAX_TOKENS", 800),
   /** Set DETECTOR_LLM=off to run the detector with rules only (offline, CI). */
   detectorLlm: (process.env.DETECTOR_LLM ?? "auto") as "auto" | "off",
 

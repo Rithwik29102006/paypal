@@ -225,6 +225,7 @@ async function llmJudge(input: DetectRequest, judgeModel?: LanguageModel): Promi
   try {
     const { output } = await generateText({
       model: judgeModel ?? model(config.detectorModel),
+      maxOutputTokens: config.detectorMaxTokens,
       system: JUDGE_SYSTEM,
       prompt: [
         `USER REQUEST:\n${input.userRequest || "(not provided)"}`,

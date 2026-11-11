@@ -74,6 +74,7 @@ export async function runAgent(opts: {
     prompt: opts.request,
     tools,
     stopWhen: stepCountIs(12),
+    maxOutputTokens: config.agentMaxTokens,
     temperature: 0,
   });
 
