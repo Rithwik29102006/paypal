@@ -7,13 +7,13 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { runAgent } from "./agent.js";
-import { config, llmConfigured } from "./config.js";
+import { config, llmConfigured, llmKeyVar } from "./config.js";
 import { defaultClient, MockMandateClient } from "./mandateClient.js";
 
 const request = process.argv.slice(2).join(" ") || "Buy notebooks and milk for this week";
 
 if (!llmConfigured()) {
-  console.error(`No API key for ${config.llmProvider}. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in apps/agent/.env`);
+  console.error(`No API key for ${config.llmProvider}. Set ${llmKeyVar()} in apps/agent/.env (or OPENROUTER_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY with LLM_PROVIDER to match)`);
   process.exit(1);
 }
 

@@ -7,7 +7,7 @@ Member 1's part of Mandate. The agent shops for the user but **cannot pay by its
 ```bash
 pnpm install                         # from the repo root
 cp apps/agent/.env.example apps/agent/.env
-# add ANTHROPIC_API_KEY (or OPENAI_API_KEY + LLM_PROVIDER=openai)
+# add ANTHROPIC_API_KEY, or OPENROUTER_API_KEY (or OPENAI_API_KEY)
 
 pnpm test                            # 19 tests (incl. agent loop with a scripted model), no API key needed
 pnpm redteam                         # 45-case red-team suite -> tests/redteam/report.md

@@ -9,13 +9,34 @@ function num(name: string, fallback: number): number {
   return v === undefined || v === "" ? fallback : Number(v);
 }
 
+export type LlmProvider = "anthropic" | "openai" | "openrouter";
+
+/** LLM_PROVIDER wins; otherwise pick the provider whose key is set (Anthropic first). */
+function pickProvider(): LlmProvider {
+  const p = process.env.LLM_PROVIDER;
+  if (p === "anthropic" || p === "openai" || p === "openrouter") return p;
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.OPENROUTER_API_KEY) return "openrouter";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  return "anthropic";
+}
+
+const llmProvider = pickProvider();
+
+/** Default model ids per provider (OpenRouter uses "vendor/model" slugs). */
+const DEFAULT_MODELS: Record<LlmProvider, { agent: string; detector: string }> = {
+  anthropic: { agent: "claude-sonnet-5-5", detector: "claude-haiku-5-5" },
+  openrouter: { agent: "anthropic/claude-sonnet-5.5", detector: "anthropic/claude-haiku-5.5" },
+  openai: { agent: "gpt-5", detector: "gpt-5-mini" },
+};
+
 export const config = {
-  /** "anthropic" or "openai" */
-  llmProvider: (process.env.LLM_PROVIDER ?? "anthropic") as "anthropic" | "openai",
+  /** "anthropic", "openai" or "openrouter" */
+  llmProvider,
   /** Model for the shopping agent. Pin it here so the whole team uses the same one. */
-  agentModel: process.env.AGENT_MODEL ?? "claude-sonnet-5-5",
+  agentModel: process.env.AGENT_MODEL || DEFAULT_MODELS[llmProvider].agent,
   /** Smaller, faster model for the trick detector's LLM judge. */
-  detectorModel: process.env.DETECTOR_MODEL ?? "claude-haiku-5-5",
+  detectorModel: process.env.DETECTOR_MODEL || DEFAULT_MODELS[llmProvider].detector,
   /** Set DETECTOR_LLM=off to run the detector with rules only (offline, CI). */
   detectorLlm: (process.env.DETECTOR_LLM ?? "auto") as "auto" | "off",
 
@@ -39,8 +60,17 @@ export const config = {
   approvalTimeoutMs: num("APPROVAL_TIMEOUT_MS", 120_000),
 };
 
+const KEY_VAR: Record<LlmProvider, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+};
+
+/** Name of the env var holding the key for the active provider. */
+export function llmKeyVar(): string {
+  return KEY_VAR[config.llmProvider];
+}
+
 export function llmConfigured(): boolean {
-  return config.llmProvider === "openai"
-    ? Boolean(process.env.OPENAI_API_KEY)
-    : Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env[llmKeyVar()]);
 }

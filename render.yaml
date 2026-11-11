@@ -74,9 +74,12 @@ services:
         value: "0"
       - key: MANDATE_ID
         value: mdt_demo
+      # anthropic or openrouter; set the matching key below (leave the other empty)
       - key: LLM_PROVIDER
         value: anthropic
       - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
         sync: false
       # Public https URL of mandate-api
       - key: MANDATE_API_URL

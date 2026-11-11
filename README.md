@@ -80,7 +80,7 @@ Requirements: Node 20+, pnpm 9 (`npm install -g pnpm@9`).
 
 ```bash
 pnpm install
-cp apps/agent/.env.example apps/agent/.env        # set MOCK_API=0 and ANTHROPIC_API_KEY
+cp apps/agent/.env.example apps/agent/.env        # set MOCK_API=0 and ANTHROPIC_API_KEY or OPENROUTER_API_KEY
 cp apps/web/.env.example apps/web/.env.local
 ```
 
