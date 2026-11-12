@@ -8,10 +8,11 @@
  *                   POST /pay again, which captures the approved order.
  * PayPal adds its own params (token, PayerID); we ignore them.
  */
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Seal } from "@/components/Seal";
 import { useSearchParams } from "next/navigation";
+import { refundCart } from "@/lib/api";
 import { CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { completeVault, payCart } from "@/lib/api";
 import { useMandate } from "@/lib/state";
@@ -26,8 +27,12 @@ function ReturnInner() {
     message: cartId ? "Confirming your payment with PayPal…" : "Saving your PayPal account…",
   });
 
+  // Run exactly once per visit: the dashboard re-renders often, and paying or saving twice is wrong.
+  const ran = useRef(false);
   useEffect(() => {
-    let cancelled = false;
+    if (ran.current) return;
+    ran.current = true;
+    const cancelled = false;
     if (cartId) {
       payCart(cartId)
         .then((p) => {
@@ -53,10 +58,8 @@ function ReturnInner() {
     } else {
       setState({ status: "error", message: "This page is reached from PayPal after approving an order. Start from the agent instead." });
     }
-    return () => {
-      cancelled = true;
-    };
-  }, [mandateId, cartId, setMandateId, refresh, clearPaypalApproval]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mandateId, cartId]);
 
   return (
     <div className="mx-auto mt-6 max-w-[560px] rounded-[26px] bg-white p-8 text-center sm:p-10">
@@ -69,10 +72,46 @@ function ReturnInner() {
         {state.status === "done" ? state.title : state.status === "error" ? "PayPal didn't finish" : "Talking to PayPal"}
       </h1>
       <p className="mx-auto mt-3 max-w-[42ch] text-[1.05rem] text-ink-600">{state.message}</p>
+      {cartId && state.status === "done" && state.title === "Paid with PayPal" && <ReturnUndo cartId={cartId} />}
       <div className="mt-7 flex justify-center gap-2">
         <Link href="/" className="btn-pp">Back to the agent</Link>
         <Link href="/receipts" className="btn-ghost">See activity</Link>
       </div>
+    </div>
+  );
+}
+
+/** Same 60-second undo as in the chat, for purchases finished here after PayPal approval. */
+function ReturnUndo({ cartId }: { cartId: string }) {
+  const [left, setLeft] = useState(60);
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (left <= 0 || state === "done") return;
+    const t = setTimeout(() => setLeft((l) => l - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left, state]);
+  if (state === "done") return <p className="mt-5 font-semibold text-ask">Undone. PayPal refunded the payment.</p>;
+  if (left <= 0) return null;
+  return (
+    <div className="mt-5">
+      <button
+        disabled={state === "busy"}
+        onClick={async () => {
+          setState("busy");
+          try {
+            await refundCart(cartId);
+            setState("done");
+          } catch (e) {
+            setMsg((e as Error).message);
+            setState("error");
+          }
+        }}
+        className="rounded-full border border-go/40 px-5 py-2 font-semibold text-go hover:bg-go hover:text-white"
+      >
+        {state === "busy" ? "Refunding…" : `Changed your mind? Undo (${left}s)`}
+      </button>
+      {state === "error" && <p className="mt-2 text-sm text-stop">{msg}</p>}
     </div>
   );
 }

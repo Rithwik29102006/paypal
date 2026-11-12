@@ -6,7 +6,64 @@ import { evidencePdfUrl } from "@/lib/api";
 import { categoriesSentence, disputeReason, listOf, money, when } from "@/lib/describe";
 import { Seal } from "@/components/Seal";
 import { cn } from "@/lib/utils";
-import { Check, FileText, Scale, X } from "lucide-react";
+import { Check, FileText, Gavel, Scale, X } from "lucide-react";
+
+/** The dispute as a short courtroom scene: each piece of proof is handed to PayPal, then the verdict lands. */
+function Courtroom({ d, onClose }: { d: DisputeItem; onClose: () => void }) {
+  const e = d.evidence;
+  const exhibits = [
+    { title: "Anita's signed rules", ok: e?.mandate.signatureValid ?? true },
+    { title: e?.cart.decision === "needs_approval" ? "Anita was asked first" : "The cart fit those rules", ok: e ? e.cart.decision !== "block" : true },
+    ...(e?.approval ? [{ title: e.approval.status === "approved" ? "Anita approved it" : "Anita did not approve", ok: e.approval.status === "approved" }] : []),
+    { title: "PayPal took the payment through Mandate", ok: true },
+    { title: "The sealed history is untouched", ok: e?.chain.ok ?? true },
+  ];
+  const step = 0.9; // seconds between exhibits
+  const verdictAt = exhibits.length * step + 0.6;
+  const verdict =
+    d.status === "won" ? { text: "Ruled for the seller", tone: "bg-go" } : d.status === "lost" ? { text: "Ruled for the buyer", tone: "bg-stop" } : { text: "Case handed to PayPal", tone: "bg-pp" };
+  return (
+    <div className="relative mt-6 overflow-hidden rounded-[22px] bg-navy p-6 text-white sm:p-8">
+      <style>{`
+        @keyframes exhibit { 0% { opacity: 0; transform: translateX(-24px) } 18% { opacity: 1; transform: none } 70% { opacity: 1; transform: none } 100% { opacity: .55; transform: translateX(18px) scale(.97) } }
+        @keyframes verdict { 0% { opacity: 0; transform: scale(1.4) rotate(-10deg) } 100% { opacity: 1; transform: scale(1) rotate(-5deg) } }
+      `}</style>
+      <div className="flex items-center justify-between">
+        <p className="font-display text-[1.3rem] font-bold">The case, as PayPal saw it</p>
+        <button onClick={onClose} className="rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close the case view">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+      <p className="mt-1 text-white/70">{disputeReason(d.reason)}</p>
+      <div className="mt-6 grid items-center gap-6 sm:grid-cols-[1fr_auto]">
+        <ol className="space-y-2.5">
+          {exhibits.map((x, i) => (
+            <li
+              key={x.title}
+              className="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3"
+              style={{ animation: `exhibit ${step * 2.2}s ease-out ${i * step}s both` }}
+            >
+              <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", x.ok ? "bg-go" : "bg-stop")}>
+                {x.ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+              </span>
+              <span className="text-sm text-white/60">Exhibit {i + 1}</span>
+              <span className="font-medium">{x.title}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="flex flex-col items-center gap-3 sm:w-[220px]">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-sky/60 bg-white/5">
+            <Gavel className="h-10 w-10 text-sky" />
+          </div>
+          <p className="font-semibold">PayPal Disputes</p>
+          <div className={cn("rounded-2xl px-4 py-2 text-center font-display text-[1.15rem] font-extrabold", verdict.tone)} style={{ animation: `verdict .5s cubic-bezier(.2,1.4,.4,1) ${verdictAt}s both` }}>
+            {verdict.text}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const STAGES = ["Buyer opened a dispute", "Mandate sent its proof", "PayPal decides"] as const;
 
@@ -66,6 +123,7 @@ function DisputeCard({ d }: { d: DisputeItem }) {
   const { defendDispute, resolveDispute } = useMandate();
   const [busy, setBusy] = useState<"" | "defend" | "rule">("");
   const [showProof, setShowProof] = useState(false);
+  const [court, setCourt] = useState(0); // bump to replay the scene
   const stage = stageIndex(d);
   const done = d.status === "won" || d.status === "lost";
 
@@ -123,6 +181,11 @@ function DisputeCard({ d }: { d: DisputeItem }) {
           </button>
         )}
         {d.evidence && (
+          <button onClick={() => setCourt((c) => c + 1)} className="btn-ghost">
+            <Gavel className="h-4 w-4" /> Play the case
+          </button>
+        )}
+        {d.evidence && (
           <a href={evidencePdfUrl(d.id)} target="_blank" rel="noreferrer" className="btn-ghost">
             <FileText className="h-4 w-4" /> Proof as PDF
           </a>
@@ -133,6 +196,8 @@ function DisputeCard({ d }: { d: DisputeItem }) {
           </button>
         )}
       </div>
+
+      {court > 0 && <Courtroom key={court} d={d} onClose={() => setCourt(0)} />}
 
       {showProof && (
         <div className="mt-6 rounded-[20px] bg-mist p-5 animate-rise">

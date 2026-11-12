@@ -89,6 +89,8 @@ export function describeReceipt(r: Receipt): ActivityLine {
     case "mandate_created":
       return { tone: "info", title: "Anita signed her spending rules", detail: "Every purchase from here on is checked against them." };
     case "mandate_updated":
+      if (p.status === "paused") return { tone: "stop", title: "Anita paused all spending", detail: "Mandate refuses every cart until she resumes." };
+      if (p.status === "active") return { tone: "go", title: "Anita resumed spending", detail: "The same signed rules apply again." };
       return { tone: "info", title: "Spending rules updated and signed again" };
     case "mandate_revoked":
       return { tone: "info", title: "An older set of rules was retired" };
@@ -107,6 +109,7 @@ export function describeReceipt(r: Receipt): ActivityLine {
         : { tone: "go", title: "Anita approved a purchase" };
     case "payment": {
       const s = String(p.status ?? "");
+      if (/refund/i.test(s)) return { tone: "ask", title: `Anita undid a purchase: PayPal refunded ${total ? money(total) : "it"}` };
       if (/captur|complete/i.test(s)) return { tone: "go", title: `Paid ${total ? money(total) : ""} with PayPal`.replace("  ", " "), detail: what };
       if (/created|pending/i.test(s)) return { tone: "ask", title: "PayPal order created, waiting for the buyer to approve", detail: what };
       if (/fail|error/i.test(s)) return { tone: "stop", title: "A PayPal payment did not go through" };

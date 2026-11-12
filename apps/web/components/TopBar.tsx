@@ -13,6 +13,8 @@ const NAV = [
   { href: "/mandate", label: "Rules" },
   { href: "/receipts", label: "Activity" },
   { href: "/disputes", label: "Disputes" },
+  { href: "/live", label: "Live" },
+  { href: "/challenge", label: "Trick the agent" },
 ];
 
 export function TopBar() {

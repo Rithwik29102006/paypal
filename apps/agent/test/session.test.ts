@@ -69,6 +69,14 @@ describe("payment flow (no LLM)", () => {
     expect(out.status).toBe("blocked");
   });
 
+  it("Mandate inspects an item's store page even when the agent never opened it", async () => {
+    const { s, client } = session("buy a back-to-school bundle");
+    // No recordPage: the model skipped reading the poisoned bundle page.
+    const out = await s.requestPayment([{ sku: "SCH-BUNDLE", qty: 1 }], "Bundle as requested.");
+    expect(out.status).not.toBe("paid");
+    expect(client.spentThisMonth).toBe(0);
+  });
+
   it("mock /pay refuses a blocked cart (second lock)", async () => {
     const { s, client } = session("milk");
     const out = await s.requestPayment([{ sku: "GC-100", qty: 1 }], "gift");

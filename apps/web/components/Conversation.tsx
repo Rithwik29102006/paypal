@@ -8,7 +8,120 @@ import { AgentOrb } from "@/components/AgentOrb";
 import { AgentText } from "@/components/AgentText";
 import { HandoffRail } from "@/components/HandoffRail";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ShieldX } from "lucide-react";
+import { ChevronDown, ShieldX, MessageCircleQuestion, TriangleAlert } from "lucide-react";
+import { explainRun, refundCart } from "@/lib/api";
+import { useEffect } from "react";
+
+const UNDO_SECONDS = 60;
+
+/** Anita's 60-second undo: PayPal refunds the payment in full. */
+function UndoButton({ run }: { run: AgentRun }) {
+  const { refresh } = useMandate();
+  const deadline = new Date(run.timestamp).getTime() + UNDO_SECONDS * 1000;
+  const [left, setLeft] = useState(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (left <= 0 || state === "done") return;
+    const t = setInterval(() => setLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000))), 500);
+    return () => clearInterval(t);
+  }, [deadline, left, state]);
+  if (!run.cartId) return null;
+  if (state === "done") return <span className="font-semibold text-ask">Undone. PayPal refunded it.</span>;
+  if (left <= 0) return null;
+  const undo = async () => {
+    setState("busy");
+    try {
+      await refundCart(run.cartId!);
+      setState("done");
+      refresh();
+    } catch (e) {
+      setMsg((e as Error).message);
+      setState("error");
+    }
+  };
+  return (
+    <span className="inline-flex items-center gap-3">
+      <button onClick={undo} disabled={state === "busy"} className="relative overflow-hidden rounded-full border border-go/40 bg-white px-4 py-1.5 text-sm font-semibold text-go hover:bg-go hover:text-white">
+        <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-go/10" style={{ width: `${(left / UNDO_SECONDS) * 100}%` }} />
+        <span className="relative">{state === "busy" ? "Refunding…" : `Undo (${left}s)`}</span>
+      </button>
+      {state === "error" && <span className="text-sm text-stop">{msg}</span>}
+    </span>
+  );
+}
+
+const KNOWN_SELLERS = ["demo-store"];
+
+/** Edit distance, to spot look-alike seller names such as "dem0-store". */
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+
+/** Shows a seller the agent passed over because its name imitates a real one. */
+function LookalikeCard({ text }: { text: string }) {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/\b[a-z0-9]+(?:-[a-z0-9]+)+\b/gi)) {
+    const name = m[0].toLowerCase();
+    if (KNOWN_SELLERS.some((k) => k !== name && distance(k, name) <= 2)) found.add(name);
+  }
+  if (!found.size) return null;
+  const fake = [...found][0];
+  const real = KNOWN_SELLERS.reduce((best, k) => (distance(k, fake) < distance(best, fake) ? k : best));
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-ask/30 bg-ask-50 px-4 py-3">
+      <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-ask" />
+      <div>
+        <p className="font-semibold text-ink">Look-alike seller avoided</p>
+        <p className="mt-1 font-mono text-[1.05rem]">
+          <span className="text-go">{real}</span>
+          <span className="mx-2 text-ink-400">vs</span>
+          {fake.split("").map((ch, i) => (
+            <span key={i} className={ch !== real[i] ? "rounded bg-stop px-0.5 text-white" : "text-stop"}>
+              {ch}
+            </span>
+          ))}
+        </p>
+        <p className="mt-1 text-sm text-ink-600">One character differs. The agent bought from the real seller.</p>
+      </div>
+    </div>
+  );
+}
+
+/** "Why did you do that?": the agent explains its choice in one sentence. */
+function WhyButton({ run }: { run: AgentRun }) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [text, setText] = useState("");
+  const ask = async () => {
+    setState("busy");
+    try {
+      const r = await explainRun(run.request, run.response, run.steps);
+      setText(r.text);
+      setState("done");
+    } catch (e) {
+      setText((e as Error).message);
+      setState("error");
+    }
+  };
+  if (state === "done")
+    return (
+      <p className="flex gap-2 rounded-2xl bg-pp-50 px-4 py-3 text-navy animate-rise">
+        <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0" />
+        <span>{text}</span>
+      </p>
+    );
+  return (
+    <button onClick={ask} disabled={state === "busy"} className="btn-quiet -ml-3">
+      <MessageCircleQuestion className="h-4 w-4" />
+      {state === "busy" ? "Thinking…" : state === "error" ? `Couldn't explain: ${text}` : "Why did you do that?"}
+    </button>
+  );
+}
 
 /** The detector's findings for a stopped cart, read from its sealed receipt. */
 function Caught({ cartId }: { cartId?: string }) {
@@ -42,9 +155,12 @@ function OutcomeBanner({ run, isLatest }: { run: AgentRun; isLatest: boolean }) 
   switch (run.outcome) {
     case "paid":
       return (
-        <p className="rounded-2xl bg-go-50 px-4 py-3 text-go">
-          <strong className="font-semibold">Paid with PayPal.</strong> A receipt was added to Activity.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-go-50 px-4 py-3 text-go">
+          <p>
+            <strong className="font-semibold">Paid with PayPal.</strong> A receipt was added to Activity.
+          </p>
+          {isLatest && <UndoButton run={run} />}
+        </div>
       );
     case "awaiting_paypal":
       return (
@@ -94,7 +210,7 @@ function OutcomeBanner({ run, isLatest }: { run: AgentRun; isLatest: boolean }) 
     case "error":
       return (
         <p className="rounded-2xl bg-stop-50 px-4 py-3 text-stop">
-          <strong className="font-semibold">The agent couldn&apos;t finish.</strong> Check that the agent and Mandate are running, then try again.
+          <strong className="font-semibold">The agent couldn&apos;t finish.</strong> {run.response || "Check that the agent and Mandate are running, then try again."}
         </p>
       );
     default:
@@ -145,7 +261,11 @@ export function Exchange({ run, isLatest }: { run: AgentRun; isLatest: boolean }
           </div>
           <OutcomeBanner run={run} isLatest={isLatest} />
           {run.outcome !== "error" && <AgentText text={run.response} />}
-          <Steps steps={run.steps} />
+          {run.outcome !== "error" && <LookalikeCard text={run.response} />}
+          <div className="flex flex-wrap items-center gap-x-4">
+            <Steps steps={run.steps} />
+            {run.outcome !== "error" && <WhyButton run={run} />}
+          </div>
         </div>
       </article>
     </div>

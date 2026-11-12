@@ -28,7 +28,7 @@ function Amount({ value, onChange, label }: { value: number; onChange: (n: numbe
 }
 
 export default function RulesPage() {
-  const { mandate, mandateLoaded, updateRules } = useMandate();
+  const { mandate, mandateLoaded, updateRules, who } = useMandate();
   const r = mandate.rules;
 
   const [monthlyCap, setMonthlyCap] = useState(r.monthlyCap);
@@ -92,7 +92,7 @@ export default function RulesPage() {
 
   return (
     <div className="max-w-[860px]">
-      <h1 className="text-[2.4rem] font-extrabold leading-tight">Anita&apos;s rules</h1>
+      <h1 className="text-[2.4rem] font-extrabold leading-tight">{who === "sam" ? "Sam's allowance" : "Anita's rules"}</h1>
       <p className="mt-2 max-w-[62ch] text-[1.08rem] text-ink-600">
         Edit the sentence, then sign it. Mandate checks every cart the agent builds against exactly these words.
       </p>
@@ -162,7 +162,7 @@ export default function RulesPage() {
             value={expiresAt}
             onChange={(e) => setExpiresAt(e.target.value)}
             aria-label="Rules end date"
-            className="rounded-lg border-b-2 border-pp bg-transparent px-1 font-bold text-pp focus:outline-none"
+            className="border-b-2 border-pp bg-transparent px-1 font-bold text-pp focus:outline-none"
           />
           .
         </p>

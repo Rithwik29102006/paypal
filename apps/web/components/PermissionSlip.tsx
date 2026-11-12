@@ -16,7 +16,7 @@ function budgetWords(pct: number): string {
 
 /** Anita's signed rules, presented as the permission slip the agent carries. */
 export function PermissionSlip() {
-  const { mandate, mandateLoaded, setPaused } = useMandate();
+  const { mandate, mandateLoaded, setPaused, who } = useMandate();
   const [busy, setBusy] = useState(false);
   const paused = mandate.status === "paused";
   const toggle = async () => {
@@ -32,9 +32,9 @@ export function PermissionSlip() {
     <section aria-labelledby="slip-title" className="slip shadow-[0_1px_0_#D8E1EF,0_18px_40px_-28px_rgba(0,28,100,.45)]">
       <div className="flex items-start justify-between gap-4 px-6 pb-5 pt-6">
         <div>
-          <p className="text-sm text-ink-400">Permission slip</p>
+          <p className="text-sm text-ink-400">{who === "sam" ? "Kid's allowance, signed by Anita" : "Permission slip"}</p>
           <h2 id="slip-title" className="mt-0.5 text-[1.6rem] font-bold leading-tight">
-            What the agent may spend
+            {who === "sam" ? "What Sam's agent may spend" : "What the agent may spend"}
           </h2>
         </div>
         <div className={signed ? "animate-stamp" : paused ? "grayscale opacity-60" : "opacity-30"} title={signed ? "Signed by Anita" : paused ? "Paused by Anita" : "Not signed yet"}>

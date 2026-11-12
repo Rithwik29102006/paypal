@@ -21,3 +21,4 @@ apps/api/.evidence/
 .evidence
 node_modules
 dist
+*.mp4

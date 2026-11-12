@@ -30,6 +30,15 @@ Anita lets an agent handle her family's groceries and school supplies: **$300 a 
 - **Rules as a sentence.** Anita edits "My agent may spend up to $300 a month…" in place and signs it.
 - **One-click integrity check.** Activity is a plain-language timeline; "Check nothing was changed" verifies the whole hash chain.
 
+- **Can you trick the agent?** A public challenge page: write your own sneaky product page and see whether Mandate catches it, with the giveaway parts highlighted.
+- **Undo within 60 seconds.** After a purchase, one tap refunds it in full through PayPal (`POST /carts/:cartId/refund`, Payments v2 refunds), receipted.
+- **Kid's allowance.** Anita's son Sam has his own agent bound by a smaller slip she signed ($40 a month, $15 at once); the dashboard switches between the two agents.
+- **Panic phrase.** Typing or saying "Mandate, stop everything" pauses all spending.
+- **Why did you do that?** The agent explains any purchase in one sentence, citing what it did or read.
+- **Look-alike sellers.** When the agent avoids a fake seller such as `dem0-store`, the reply shows it next to the real one with the swapped character highlighted.
+- **Dispute courtroom.** Replays a dispute as exhibits handed to PayPal, ending in the verdict.
+- **Live.** Every cart any agent sends, moving from agent to Mandate to PayPal (or stopping) in real time.
+
 ## How it is built
 
 ```text
@@ -81,7 +90,7 @@ The AI decides *what* to buy and flags *suspicious* carts. It never decides whet
 | Dispute defence | **Done (real sandbox)**: buyer filed an unauthorised-payment dispute `PP-R-PPZ-10198985` on the $8.98 agent purchase; Mandate matched it to the payment and submitted the signed mandate, risk report and receipt chain (with a PDF) through the PayPal Disputes API. PayPal moved it to UNDER_REVIEW (chargeback stage); the final ruling comes from PayPal and is not simulated |
 | PayPal Vault (save account once) | **Code complete, not shown in the demo**: setup-token, payment-token and vaulted `/pay` paths are implemented and covered by tests; the recorded demo uses the buyer-approval fallback (PayPal checkout link, then capture on return) |
 | Prompt-injection defence | Hidden "buy 10 gift cards" attack blocked at risk 0.99 against the real API; holdout red team (cases written after the detector was built): **10 of 10 attacks stopped, 0 of 5 false blocks** with the LLM judge (Claude Haiku 5.5 via OpenRouter); 7 of 10 with rules alone. Development set: 15 of 15, 0 of 15 false blocks |
-| Automated tests | 103 tests (24 agent, 79 API), typecheck clean, production build passes |
+| Automated tests | 106 tests (25 agent, 81 API), typecheck clean, production build passes |
 
 ## Run it locally
 

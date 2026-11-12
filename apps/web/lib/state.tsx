@@ -55,6 +55,8 @@ export interface AgentRun {
   reasons?: string[];
   /** Cart id from Mandate's check, to find its receipt (and the detector's findings). */
   cartId?: string;
+  /** Which permission slip (whose agent) this run used. */
+  mandateId?: string;
 }
 
 interface MandateContextType {
@@ -92,6 +94,13 @@ interface MandateContextType {
   setPaused: (paused: boolean) => Promise<void>;
   refresh: () => Promise<void>;
   setMandateId: (id: string) => void;
+  /** Whose agent the dashboard is showing: Anita's, or her son Sam's (kid's allowance). */
+  who: "anita" | "sam";
+  /** The permission slip currently shown. */
+  mandateId: string;
+  /** Every live event Mandate published while this page was open, all agents, newest first. */
+  wire: LiveEventV2[];
+  switchAgent: (who: "anita" | "sam") => void;
 }
 
 const PLACEHOLDER_RULES: Rules = {
@@ -116,6 +125,9 @@ const placeholderMandate = (id: string): MandateData => ({
   createdAt: new Date(0).toISOString(),
   spentThisMonth: 0,
 });
+const TEEN_KEY = "mandate.teenMandateId";
+const WHO_KEY = "mandate.who";
+export const TEEN_MANDATE_ID = "mdt_teen";
 
 const MANDATE_KEY = "mandate.mandateId";
 const APPROVALS_KEY = "mandate.approvals";
@@ -151,6 +163,8 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentHistory, setAgentHistory] = useState<AgentRun[]>([]);
   const [liveSteps, setLiveSteps] = useState<string[]>([]);
+  // Every live event from Mandate, for any agent (the Live view).
+  const [wire, setWire] = useState<LiveEventV2[]>([]);
   // What Mandate/PayPal said while the current run was in flight (filled from the SSE stream).
   const runRef = useRef<{ active: boolean; decision?: string; paid?: boolean; total?: number; reasons?: string[]; cartId?: string }>({ active: false });
   const [apiConnected, setApiConnected] = useState(false);
@@ -160,16 +174,31 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
   const mandateIdRef = useRef(mandateId);
   mandateIdRef.current = mandateId;
 
-  // Restore the mandate id (a new mandate replaces mdt_demo) and approvals from this browser.
+  // Two agents, two permission slips: Anita's (MANDATE_KEY, replaced when she signs new rules)
+  // and Sam's kid's-allowance slip (TEEN_KEY, mdt_teen until it is re-signed).
+  const [who, setWho] = useState<"anita" | "sam">("anita");
+  const whoRef = useRef(who);
+  whoRef.current = who;
+
+  // Restore the mandate ids and approvals from this browser.
   useEffect(() => {
-    setMandateIdState(readStored(MANDATE_KEY, api.DEFAULT_MANDATE_ID));
+    const w = readStored<"anita" | "sam">(WHO_KEY, "anita");
+    setWho(w);
+    setMandateIdState(w === "sam" ? readStored(TEEN_KEY, TEEN_MANDATE_ID) : readStored(MANDATE_KEY, api.DEFAULT_MANDATE_ID));
     setApprovals(readStored<PendingApproval[]>(APPROVALS_KEY, []));
   }, []);
   useEffect(() => writeStored(APPROVALS_KEY, approvals.slice(0, 30)), [approvals]);
 
   const setMandateId = useCallback((id: string) => {
-    writeStored(MANDATE_KEY, id);
+    writeStored(whoRef.current === "sam" ? TEEN_KEY : MANDATE_KEY, id);
     setMandateIdState(id);
+  }, []);
+
+  const switchAgent = useCallback((w: "anita" | "sam") => {
+    writeStored(WHO_KEY, w);
+    setWho(w);
+    setMandateLoaded(false);
+    setMandateIdState(w === "sam" ? readStored(TEEN_KEY, TEEN_MANDATE_ID) : readStored(MANDATE_KEY, api.DEFAULT_MANDATE_ID));
   }, []);
 
   const addEvent = useCallback((e: LiveEvent) => {
@@ -224,6 +253,7 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = api.subscribeEvents(
       (e: LiveEventV2) => {
+        setWire((prev) => [e, ...prev.slice(0, 199)]);
         if (e.mandateId && e.mandateId !== mandateIdRef.current) return;
         addEvent({ type: e.type === "mandate" ? "agent" : e.type, cartId: e.cartId, decision: e.decision, summary: e.summary, at: e.at });
         if (runRef.current.active) {
@@ -368,6 +398,7 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
         total: r.total,
         reasons: r.reasons,
         cartId: r.cartId,
+        mandateId: mandateIdRef.current,
       };
     };
     try {
@@ -437,6 +468,10 @@ export function MandateProvider({ children }: { children: React.ReactNode }) {
         setPaused,
         refresh,
         setMandateId,
+        who,
+        mandateId,
+        wire,
+        switchAgent,
       }}
     >
       {children}

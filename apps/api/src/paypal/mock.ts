@@ -18,6 +18,7 @@ export class MockPayPal implements PayPalClient {
     createPaymentToken: 0,
     createOrder: 0,
     captureOrder: 0,
+    refundCapture: 0,
     verifyWebhook: 0,
     getDispute: 0,
     provideEvidence: 0,
@@ -30,6 +31,7 @@ export class MockPayPal implements PayPalClient {
     createPaymentToken?: Error;
     createOrder?: Error;
     captureOrder?: Error;
+    refundCapture?: Error;
     verifyWebhook?: Error;
     getDispute?: Error;
     provideEvidence?: Error;
@@ -47,6 +49,7 @@ export class MockPayPal implements PayPalClient {
       createPaymentToken: 0,
       createOrder: 0,
       captureOrder: 0,
+      refundCapture: 0,
       verifyWebhook: 0,
       getDispute: 0,
       provideEvidence: 0,
@@ -128,6 +131,12 @@ export class MockPayPal implements PayPalClient {
       captureId,
       status: "COMPLETED",
     };
+  }
+
+  async refundCapture(captureId: string, _requestId: string): Promise<{ refundId: string; status: string }> {
+    this.callCounts.refundCapture++;
+    if (this.failures.refundCapture) throw this.failures.refundCapture;
+    return { refundId: `MOCK-REFUND-${captureId}`, status: "COMPLETED" };
   }
 
   async verifyWebhook(input: VerifyWebhookInput): Promise<boolean> {

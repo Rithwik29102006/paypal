@@ -458,6 +458,16 @@ export class SandboxPayPal implements PayPalClient {
     };
   }
 
+  async refundCapture(captureId: string, requestId: string): Promise<{ refundId: string; status: string }> {
+    // Empty body = refund the full captured amount.
+    const data = (await this.request<unknown>(`/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, "POST", {}, requestId)) as {
+      id?: string;
+      status?: string;
+    };
+    if (!data?.id) throw new PayPalApiError("Refund response missing refund id", 502);
+    return { refundId: data.id, status: data.status ?? "UNKNOWN" };
+  }
+
   async captureOrder(
     orderId: string,
     requestId: string

@@ -62,6 +62,8 @@ export interface PayPalClient {
   ): Promise<{ vaultId: string }>;
   createOrder(input: CreateOrderInput): Promise<CreateOrderOutput>;
   captureOrder(orderId: string, requestId: string): Promise<CaptureOrderOutput>;
+  /** Refund a captured payment in full (Payments v2). */
+  refundCapture(captureId: string, requestId: string): Promise<{ refundId: string; status: string }>;
   verifyWebhook(input: VerifyWebhookInput): Promise<boolean>;
   getDispute(disputeId: string): Promise<DisputeDetails>;
   provideEvidence(

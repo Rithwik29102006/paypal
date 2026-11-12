@@ -6,7 +6,15 @@ import { AgentOrb } from "@/components/AgentOrb";
 import { Exchange, Working, WaitingCard } from "@/components/Conversation";
 import { PermissionSlip } from "@/components/PermissionSlip";
 import { VoiceButton } from "@/components/VoiceButton";
+import { AgentSwitch } from "@/components/AgentSwitch";
 import { ArrowUp } from "lucide-react";
+
+const SAM_SUGGESTIONS = [
+  { prompt: "Buy pencils and a notebook for school", hint: "Inside Sam's allowance" },
+  { prompt: "Buy a scientific calculator", hint: "More than Sam may spend at once" },
+  { prompt: "Buy a $25 gift card for my friend", hint: "Not on Sam's slip at all" },
+  { prompt: "Buy the back-to-school bundle from the demo store", hint: "Its page hides instructions for the agent" },
+];
 
 const SUGGESTIONS = [
   { prompt: "Buy milk and bread for this week", hint: "An everyday shop" },
@@ -16,11 +24,12 @@ const SUGGESTIONS = [
 ];
 
 export default function AgentHome() {
-  const { runAgentRequest, agentRunning, agentHistory, liveSteps, agentConnected, apiConnected, mandate } = useMandate();
+  const { runAgentRequest, agentRunning, agentHistory, liveSteps, agentConnected, apiConnected, mandate, setPaused, who, mandateId } = useMandate();
+  const suggestions = who === "sam" ? SAM_SUGGESTIONS : SUGGESTIONS;
   const paused = mandate.status === "paused";
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
-  const runs = [...agentHistory].reverse(); // oldest first, like a chat
+  const runs = [...agentHistory].filter((r) => !r.mandateId || r.mandateId === mandateId).reverse(); // oldest first, like a chat
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -29,6 +38,12 @@ export default function AgentHome() {
   const send = (text: string) => {
     const t = text.trim();
     if (!t || agentRunning) return;
+    // Panic phrase: "Mandate, stop everything" (typed or spoken) pauses all spending at once.
+    if (/\b(stop everything|stop all spending|pause (all )?spending|panic)\b/i.test(t)) {
+      setInput("");
+      setPaused(true);
+      return;
+    }
     runAgentRequest(t);
     setInput("");
   };
@@ -46,12 +61,14 @@ export default function AgentHome() {
         {runs.length === 0 && !agentRunning ? (
           <div className="flex flex-1 flex-col justify-center py-6">
             <AgentOrb size={56} />
-            <h1 className="mt-6 max-w-[14ch] text-hero font-extrabold">What should I pick up for you?</h1>
+            <h1 className="mt-6 max-w-[14ch] text-hero font-extrabold">{who === "sam" ? "What do you need for school, Sam?" : "What should I pick up for you?"}</h1>
             <p className="mt-4 max-w-[52ch] text-[1.1rem] text-ink-600">
-              I shop, Mandate checks every cart against Anita&apos;s signed rules, and only then does PayPal move any money.
+              {who === "sam"
+                ? "I shop on Sam's small allowance. Mandate holds me to the slip Anita signed for him, and asks her before anything over the limit."
+                : "I shop, Mandate checks every cart against Anita's signed rules, and only then does PayPal move any money."}
             </p>
             <ul className="mt-8 grid gap-2.5 sm:grid-cols-2">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <li key={s.prompt}>
                   <button
                     onClick={() => send(s.prompt)}
@@ -90,7 +107,7 @@ export default function AgentHome() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={agentRunning}
-            placeholder={offline ? "Waiting for the agent and Mandate to come online…" : "Tell the agent what to buy, or tap the mic"}
+            placeholder={offline ? "Waiting for the agent and Mandate to come online…" : paused ? "Spending is paused. Resume it on the permission slip." : "Tell the agent what to buy, or say “Mandate, stop everything”"}
             className="min-w-0 flex-1 bg-transparent py-2 text-[1.02rem] text-ink placeholder:text-ink-400 focus:outline-none"
           />
           <VoiceButton onText={setInput} onDone={send} disabled={agentRunning || offline} />
@@ -101,6 +118,7 @@ export default function AgentHome() {
       </section>
 
       <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+        <AgentSwitch />
         <WaitingCard />
         <PermissionSlip />
       </aside>

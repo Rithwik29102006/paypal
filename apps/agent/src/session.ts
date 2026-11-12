@@ -13,7 +13,7 @@
 import type { Cart, CartItem, LiveEvent } from "@mandate/shared";
 import { config } from "./config.js";
 import type { MandateClient } from "./mandateClient.js";
-import { getProduct, mentionsSku, pageUrl } from "./store.js";
+import { getProduct, mentionsSku, pageText as storePageText, pageUrl } from "./store.js";
 
 export interface PaymentOutcome {
   status: "paid" | "awaiting_buyer_approval" | "blocked" | "rejected_by_user" | "approval_timeout" | "refused_locally" | "error";
@@ -74,13 +74,21 @@ export class AgentSession {
       return { status: "refused_locally", message };
     }
 
-    // Evidence = pages of the items being bought, plus any page that names one
-    // of them (that is how an injection pushes extra items into a cart).
+    // Evidence = the store page of every item being bought (even if the agent
+    // never opened it: Mandate inspects what the merchant shows, not just what
+    // the model chose to read), plus any page the agent read that names one of
+    // them (that is how an injection pushes extra items into a cart).
     const skus = cart.items.map((i) => i.sku);
-    const pageText = [...this.pagesRead.entries()]
-      .filter(([sku, text]) => skus.includes(sku) || skus.some((s) => mentionsSku(text, s)))
-      .map(([, text]) => text)
-      .join("\n\n---\n\n");
+    const pages = new Map(
+      [...this.pagesRead.entries()].filter(([sku, text]) => skus.includes(sku) || skus.some((s) => mentionsSku(text, s)))
+    );
+    for (const sku of skus) {
+      if (!pages.has(sku)) {
+        const product = getProduct(sku);
+        if (product) pages.set(sku, storePageText(product));
+      }
+    }
+    const pageText = [...pages.values()].join("\n\n---\n\n");
     this.emit({ type: "agent", summary: `Asking Mandate to check ${cart.items.length} item(s), $${cart.total.toFixed(2)}` });
 
     const check = await this.client.check({ mandateId: this.mandateId, cart, pageText, userRequest: this.userRequest });

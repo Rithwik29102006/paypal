@@ -8,6 +8,9 @@
  *   GET  /store/products/:sku    one product + the raw page text
  *   POST /agent/run              { request } -> { text, events }
  *   POST /agent/run?stream=1     same, as server-sent events (live feed)
+ *   POST /challenge              { pageText } -> can this page trick the agent? (public demo)
+ *   GET  /challenge/stats        { tried, caught }
+ *   POST /explain                { request, response, steps } -> { text } one-sentence reason
  * Mock mode only (MOCK_API=1):
  *   GET  /mock/state             carts, approvals, spend
  *   POST /mock/approvals/:id     { approved: boolean }
@@ -15,12 +18,24 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { DetectRequest } from "@mandate/shared";
 import { runAgent } from "./agent.js";
-import { config } from "./config.js";
+import { generateText } from "ai";
+import { config, llmConfigured } from "./config.js";
+import { model } from "./llm.js";
 import { detect } from "./detector.js";
 import { defaultClient, MockMandateClient } from "./mandateClient.js";
 import { allProducts, getProduct, pageText } from "./store.js";
 
 const client = defaultClient();
+
+// "Can you trick the agent?" counters (in memory; reset when the server restarts).
+const challenge = { tried: 0, caught: 0 };
+const CHALLENGE_REQUEST = "Buy one spiral notebook for school";
+const CHALLENGE_CART = {
+  items: [{ sku: "SCH-NOTEBOOK", name: "Spiral notebook, college ruled", category: "school" as const, unitPrice: 3.99, qty: 1, merchant: "demo-store" }],
+  total: 3.99,
+  agentReasoning: "One notebook, as asked.",
+  sourceUrls: [],
+};
 
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
@@ -59,6 +74,37 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path === "/detect") {
       const body = DetectRequest.parse(await readJson(req));
       return send(res, 200, await detect(body));
+    }
+
+    if (req.method === "GET" && path === "/challenge/stats") {
+      return send(res, 200, challenge);
+    }
+
+    if (req.method === "POST" && path === "/challenge") {
+      const { pageText: text } = (await readJson(req)) as { pageText?: string };
+      if (!text || !text.trim()) return send(res, 400, { error: "Write a product page first." });
+      if (text.length > 6000) return send(res, 400, { error: "Keep the page under 6,000 characters." });
+      const report = await detect({ userRequest: CHALLENGE_REQUEST, cart: CHALLENGE_CART, pageText: text });
+      const caught = report.verdict !== "safe";
+      challenge.tried += 1;
+      if (caught) challenge.caught += 1;
+      return send(res, 200, { caught, verdict: report.verdict, riskScore: report.riskScore, signals: report.signals, stats: challenge });
+    }
+
+    if (req.method === "POST" && path === "/explain") {
+      const { request, response, steps } = (await readJson(req)) as { request?: string; response?: string; steps?: string[] };
+      if (!request || !response) return send(res, 400, { error: "request and response are required" });
+      if (!llmConfigured()) return send(res, 503, { error: "No AI key configured on the agent server." });
+      const { text } = await generateText({
+        model: model(config.agentModel),
+        maxOutputTokens: 160,
+        temperature: 0,
+        system:
+          "You explain a shopping agent's choice to the family it shops for. Answer in ONE plain sentence of at most 30 words, " +
+          "starting with 'I'. Cite something concrete it did or read (a price, a seller, a rule). No markdown, no lists.",
+        prompt: `The family asked: "${request}"\nSteps the agent took:\n${(steps ?? []).map((s) => "- " + s).join("\n")}\nThe agent's reply:\n${response}\n\nWhy did the agent make this choice?`,
+      });
+      return send(res, 200, { text: text.trim().replace(/\s+/g, " ") });
     }
 
     if (req.method === "GET" && path === "/store/products") {

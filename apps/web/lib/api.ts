@@ -62,6 +62,28 @@ export const completeVault = (id: string) =>
 
 // ---------- Approvals ----------
 
+export interface ChallengeResult {
+  caught: boolean;
+  verdict: "safe" | "suspicious" | "malicious";
+  riskScore: number;
+  signals: string[];
+  stats: { tried: number; caught: number };
+}
+
+/** "Can you trick the agent?": run a visitor's product page through Mandate's trick detector. */
+export const tryChallenge = (pageText: string) =>
+  call<ChallengeResult>(AGENT_URL, "/challenge", { method: "POST", body: JSON.stringify({ pageText }) });
+
+export const challengeStats = () => call<{ tried: number; caught: number }>(AGENT_URL, "/challenge/stats");
+
+/** One plain sentence from the agent on why it made a choice. */
+export const explainRun = (request: string, response: string, steps: string[]) =>
+  call<{ text: string }>(AGENT_URL, "/explain", { method: "POST", body: JSON.stringify({ request, response, steps }) });
+
+/** Undo a payment shortly after it happened: PayPal refunds it in full. */
+export const refundCart = (cartId: string) =>
+  call<{ cartId: string; status: "refunded"; refundId?: string }>(API_URL, `/carts/${encodeURIComponent(cartId)}/refund`, { method: "POST" });
+
 /** Emergency stop: while paused, Mandate rejects every cart. */
 export const setMandatePaused = (id: string, paused: boolean) =>
   call<{ id: string; status: "active" | "paused" }>(API_URL, `/mandates/${encodeURIComponent(id)}/${paused ? "pause" : "resume"}`, { method: "POST" });

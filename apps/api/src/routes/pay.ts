@@ -32,6 +32,9 @@ function getCartLock(cartId: string): AsyncLock {
   return lock;
 }
 
+/** How long after capture the dashboard's Undo still works (server side). */
+const UNDO_WINDOW_MS = 5 * 60 * 1000;
+
 export async function payRoutes(
   server: FastifyInstance,
   paypalClient: PayPalClient = getPayPalClient()
@@ -79,6 +82,10 @@ export async function payRoutes(
             status: "captured",
             receiptSeq: existingPayment.receiptSeq ?? undefined,
           } satisfies PayResponse);
+        }
+
+        if (existingPayment.status === "refunded") {
+          return reply.status(409).send({ error: "This purchase was undone and refunded by PayPal." });
         }
 
         if (existingPayment.status === "failed") {
@@ -578,6 +585,49 @@ export async function payRoutes(
         error: "paypal error",
         debugId,
       });
+    }
+  });
+
+  // POST /carts/:cartId/refund
+  // Anita's undo: refund a captured payment in full through PayPal, shortly after it happened.
+  // The dashboard offers 60 seconds; the server allows a little longer for slow clicks.
+  server.post("/carts/:cartId/refund", async (request, reply) => {
+    const { cartId } = request.params as { cartId: string };
+    const payment = await prisma.payment.findUnique({ where: { cartId } });
+    if (!payment) return reply.status(404).send({ error: "No payment for this purchase." });
+    if (payment.status === "refunded") return reply.send({ cartId, status: "refunded" });
+    if (payment.status !== "captured" || !payment.captureId) {
+      return reply.status(409).send({ error: "Only a completed payment can be undone." });
+    }
+    const ageMs = Date.now() - payment.updatedAt.getTime();
+    if (ageMs > UNDO_WINDOW_MS) {
+      return reply.status(409).send({ error: "The undo window has closed. Ask the seller for a refund instead." });
+    }
+    const paypal = getPayPalClient();
+    try {
+      const refund = await paypal.refundCapture(payment.captureId, `refund-${payment.id}`);
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: "refunded" } });
+      const amount = Number((payment.amountCents / 100).toFixed(2));
+      await appendReceipt(payment.mandateId, "payment", {
+        paymentId: payment.id,
+        cartId,
+        status: "refunded",
+        amount,
+        captureId: payment.captureId,
+        refundId: refund.refundId,
+        refundedAt: new Date().toISOString(),
+      });
+      publish({
+        type: "payment",
+        mandateId: payment.mandateId,
+        cartId,
+        summary: `Refunded $${amount.toFixed(2)}: Anita undid the purchase`,
+        at: new Date().toISOString(),
+      });
+      return reply.send({ cartId, status: "refunded", refundId: refund.refundId });
+    } catch (err) {
+      const message = err instanceof PayPalApiError ? err.message : (err as Error).message;
+      return reply.status(502).send({ error: `PayPal refund failed: ${message}` });
     }
   });
 }
